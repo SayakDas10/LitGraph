@@ -1,7 +1,7 @@
 .venv/
 venv/
 env/
-.litgraph.json
+
 # Ignore Python cache files
 __pycache__/
 *.pyc
@@ -13,3 +13,5 @@ papers/*
 
 # Ignore macOS system files (if applicable)
 .DS_Store
+
+.litgraph.json
