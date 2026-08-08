@@ -1,7 +1,3 @@
-Here is a comprehensive and professionally structured `README.md` for your GitHub repository. It includes detailed instructions utilizing `uv` for project management, explicitly outlines the tool's features and limitations, and incorporates the crucial security notices we discussed.
-
----
-
 # LitGraph 🕸️📚
 
 LitGraph is a privacy-first, local web application designed for researchers and academics. It automatically visualizes your collection of scientific PDFs as an interactive network graph, allowing you to seamlessly explore citation relationships and read the exact contextual sentences where one paper cites another.
