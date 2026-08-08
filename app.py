@@ -2,7 +2,7 @@ import os
 import re
 import time
 import requests
-import fitz  # PyMuPDF
+import pymupdf  
 import webbrowser
 import threading
 import html
@@ -18,12 +18,33 @@ os.makedirs(PAPERS_DIR, exist_ok=True)
 
 @app.route('/')
 def index():
-    # This automatically loads templates/index.html
     return render_template('index.html')
 
 @app.route('/papers/<path:filename>')
 def serve_paper(filename):
     return send_from_directory(PAPERS_DIR, filename)
+
+@app.route('/api/folders')
+def get_folders():
+    """Returns a list of all subfolders inside the papers directory."""
+    folders = [{"id": "global", "name": "Global (All Papers)", "path": ""}]
+    
+    for root, dirs, files in os.walk(PAPERS_DIR):
+        rel_path = os.path.relpath(root, PAPERS_DIR)
+        if rel_path == '.': 
+            continue
+        
+        # Format for Windows and Mac consistency
+        clean_path = rel_path.replace(os.sep, '/')
+        folder_name = os.path.basename(root)
+        
+        folders.append({
+            "id": html.escape(clean_path), 
+            "name": html.escape(folder_name), 
+            "path": html.escape(clean_path)
+        })
+        
+    return jsonify(folders)
 
 @app.route('/api/search_paper', methods=['POST'])
 def search_paper():
@@ -31,7 +52,6 @@ def search_paper():
     if not query: return jsonify([])
     results = []
     
-    # Semantic Scholar Search
     try:
         s2_url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={query}&limit=3&fields=title,authors,openAccessPdf"
         s2_res = requests.get(s2_url, timeout=6).json()
@@ -43,7 +63,6 @@ def search_paper():
                     results.append({ 'title': safe_title, 'authors': safe_authors, 'pdf_url': item['openAccessPdf']['url'], 'source': 'Semantic Scholar' })
     except: pass
 
-    # arXiv Search
     try:
         arxiv_url = f"http://export.arxiv.org/api/query?search_query=all:{query}&max_results=3"
         arxiv_res = requests.get(arxiv_url, timeout=6).text
@@ -67,6 +86,8 @@ def search_paper():
 def add_paper():
     data = request.json
     url = data.get('url', '').strip()
+    target_folder = data.get('folder', '').strip()
+    
     if not url: return jsonify({"error": "No URL provided"}), 400
     if not url.startswith('http://') and not url.startswith('https://'): url = 'https://' + url
     
@@ -93,7 +114,11 @@ def add_paper():
         filename = os.path.basename(unquote(parsed.path))
         if not filename.lower().endswith('.pdf'): filename = f"download_{int(time.time())}.pdf"
             
-        save_path = os.path.join(PAPERS_DIR, filename)
+        # Secure Path Construction
+        safe_folder = target_folder.replace('..', '').lstrip('/')
+        save_dir = os.path.join(PAPERS_DIR, safe_folder)
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, filename)
         
         with open(save_path, 'wb') as f:
             f.write(first_chunk)
@@ -106,32 +131,48 @@ def add_paper():
 
 @app.route('/api/graph')
 def build_graph():
+    # Folder Filtering Logic
+    target_folder = request.args.get('folder', '').strip()
+    safe_folder = target_folder.replace('..', '').lstrip('/')
+    
+    base_search_dir = PAPERS_DIR
+    if safe_folder and safe_folder != 'global':
+        base_search_dir = os.path.join(PAPERS_DIR, safe_folder)
+        if not os.path.exists(base_search_dir):
+            return jsonify([]) # Return empty graph if folder doesn't exist
+
     papers = []
-    for filename in os.listdir(PAPERS_DIR):
-        if filename.lower().endswith(".pdf"):
-            path = os.path.join(PAPERS_DIR, filename)
-            try:
-                doc = fitz.open(path)
-                text = re.sub(r'\s+', ' ', " ".join([page.get_text() for page in doc]))
+    
+    # Recursive search within the selected base directory
+    for root, dirs, files in os.walk(base_search_dir):
+        for filename in files:
+            if filename.lower().endswith(".pdf"):
+                path = os.path.join(root, filename)
+                # Create a relative path from the absolute root PAPERS_DIR
+                rel_path = os.path.relpath(path, PAPERS_DIR).replace(os.sep, '/')
                 
-                title = doc.metadata.get("title", "").strip()
-                if not title or title.isnumeric() or len(title) < 5 or title.lower().endswith('.pdf'):
-                    first_page_lines = doc[0].get_text("text").split('\n')
-                    for line in first_page_lines:
-                        clean_line = line.strip()
-                        if len(clean_line) > 10 and not clean_line.isnumeric():
-                            title = clean_line
-                            break
-                            
-                if not title:
-                    title = filename.rsplit('.', 1)[0]
-                
-                papers.append({
-                    "id": html.escape(filename), 
-                    "title": html.escape(title), 
-                    "text": html.escape(text)
-                })
-            except Exception as e: print(f"Could not read {filename}: {e}")
+                try:
+                    doc = pymupdf.open(path)
+                    text = re.sub(r'\s+', ' ', " ".join([page.get_text() for page in doc]))
+                    
+                    title = doc.metadata.get("title", "").strip()
+                    if not title or title.isnumeric() or len(title) < 5 or title.lower().endswith('.pdf'):
+                        first_page_lines = doc[0].get_text("text").split('\n')
+                        for line in first_page_lines:
+                            clean_line = line.strip()
+                            if len(clean_line) > 10 and not clean_line.isnumeric():
+                                title = clean_line
+                                break
+                                
+                    if not title:
+                        title = filename.rsplit('.', 1)[0]
+                    
+                    papers.append({
+                        "id": html.escape(rel_path), # ID includes the subfolder path
+                        "title": html.escape(title), 
+                        "text": html.escape(text)
+                    })
+                except Exception as e: print(f"Could not read {rel_path}: {e}")
 
     elements = [{"group": "nodes", "data": {"id": p["id"], "label": p["title"]}} for p in papers]
 

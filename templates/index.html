@@ -6,7 +6,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Links to static/style.css -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-theme="dark">
@@ -31,6 +30,12 @@
             <button class="theme-toggle" id="themeBtn" aria-label="Toggle Theme"><i class="fas fa-sun"></i></button>
         </div>
         
+        <!-- Folder Tree Block -->
+        <div class="folder-tree-container">
+            <h3 style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Projects</h3>
+            <div id="folderTree"></div>
+        </div>
+        
         <div class="controls">
             <!-- Autocomplete Search Group -->
             <div class="input-group">
@@ -52,6 +57,7 @@
 
         <div id="info">
             <div class="empty-state">
+                <div class="instruction"><i class="fas fa-folder-open"></i> Select a folder to filter the graph globally or per project.</div>
                 <div class="instruction"><i class="fas fa-magic"></i> Hover over nodes to highlight connections in deep focus.</div>
                 <div class="instruction"><i class="fas fa-external-link-alt"></i> Click a node to open the PDF instantly.</div>
                 <div class="instruction"><i class="fas fa-project-diagram"></i> Click the curved edges to read the exact citation context.</div>
@@ -72,6 +78,7 @@
         const themeBtn = document.getElementById('themeBtn');
         let isDark = true;
         window.cy = null;
+        let currentFolder = 'global';
         
         const getStyleSheet = (dark) => {
             const nodeColor = dark ? '#1e293b' : '#ffffff'; 
@@ -90,8 +97,35 @@
             ];
         };
 
-        function initGraph() {
-            fetch('/api/graph')
+        // --- Folder Logic ---
+        function loadFolders() {
+            fetch('/api/folders')
+                .then(res => res.json())
+                .then(folders => {
+                    const tree = document.getElementById('folderTree');
+                    tree.innerHTML = '';
+                    folders.forEach(f => {
+                        const div = document.createElement('div');
+                        div.className = `folder-item ${f.id === currentFolder ? 'active' : ''}`;
+                        div.innerHTML = `<i class="fas ${f.id === 'global' ? 'fa-globe' : 'fa-folder'}"></i> ${f.name}`;
+                        div.onclick = () => {
+                            currentFolder = f.id;
+                            loadFolders(); // Re-render tree to show active state
+                            initGraph(f.path);
+                        };
+                        tree.appendChild(div);
+                    });
+                });
+        }
+
+        // --- Graph Logic ---
+        function initGraph(folderPath = '') {
+            let url = '/api/graph';
+            if (folderPath && folderPath !== 'global') {
+                url += '?folder=' + encodeURIComponent(folderPath);
+            }
+            
+            fetch(url)
                 .then(res => res.json())
                 .then(data => {
                     if (window.cy) window.cy.destroy();
@@ -214,12 +248,24 @@
         function executeDownload(url) {
             const btn = document.getElementById('addBtn'); btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true;
             closeModal();
-            fetch('/api/add_paper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: url }) })
+            fetch('/api/add_paper', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ 
+                    url: url,
+                    folder: currentFolder === 'global' ? '' : currentFolder
+                }) 
+            })
             .then(res => res.json())
             .then(data => {
                 btn.innerHTML = '<i class="fas fa-plus"></i>'; btn.disabled = false;
                 if (data.error) showError(`<i class="fas fa-exclamation-triangle"></i> ${data.error}`);
-                else { document.getElementById('urlInput').value = ''; initGraph(); }
+                else { 
+                    document.getElementById('urlInput').value = ''; 
+                    // Reload folders in case a new directory was targeted
+                    loadFolders();
+                    initGraph(currentFolder === 'global' ? '' : currentFolder); 
+                }
             }).catch(err => { btn.innerHTML = '<i class="fas fa-plus"></i>'; btn.disabled = false; showError('<i class="fas fa-wifi"></i> Network error while downloading the paper.'); });
         }
 
@@ -242,6 +288,8 @@
             if (window.cy) window.cy.style().fromJson(getStyleSheet(isDark)).update();
         });
 
+        // Initialize App
+        loadFolders();
         initGraph();
     </script>
 </body>
