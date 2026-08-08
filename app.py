@@ -133,7 +133,6 @@ def add_paper():
 
 @app.route('/api/check_updates')
 def check_updates():
-    """Checks if the file system differs from the cache."""
     cache = load_cache()
     cached_papers = cache.get("papers", {})
     
@@ -147,13 +146,11 @@ def check_updates():
                 
     needs_update = False
     
-    # Check for new or modified files
     for rel_path, mtime in current_files.items():
         if rel_path not in cached_papers or cached_papers[rel_path]['mtime'] < mtime:
             needs_update = True
             break
             
-    # Check for deleted files
     if not needs_update:
         for rel_path in list(cached_papers.keys()):
             if rel_path not in current_files:
@@ -164,7 +161,6 @@ def check_updates():
 
 @app.route('/api/build_cache', methods=['POST'])
 def build_cache():
-    """Parses only new/modified PDFs and updates the cache file."""
     cache = load_cache()
     cached_papers = cache.get("papers", {})
     
@@ -180,11 +176,11 @@ def build_cache():
     
     for rel_path, mtime in current_files.items():
         if rel_path in cached_papers and cached_papers[rel_path]['mtime'] == mtime:
-            # File is unchanged, keep cached data
             new_cache_papers[rel_path] = cached_papers[rel_path]
         else:
-            # Parse new or modified file
             abs_path = os.path.join(PAPERS_DIR, rel_path)
+            # Preserve previous status if file was modified, otherwise set to 'none'
+            existing_status = cached_papers.get(rel_path, {}).get("status", "none")
             try:
                 doc = pymupdf.open(abs_path)
                 text = re.sub(r'\s+', ' ', " ".join([page.get_text() for page in doc]))
@@ -202,7 +198,8 @@ def build_cache():
                 new_cache_papers[rel_path] = {
                     "mtime": mtime,
                     "title": title,
-                    "text": text
+                    "text": text,
+                    "status": existing_status
                 }
             except Exception as e:
                 print(f"Could not read {rel_path}: {e}")
@@ -211,9 +208,24 @@ def build_cache():
     save_cache(cache)
     return jsonify({"success": True})
 
+@app.route('/api/update_status', methods=['POST'])
+def update_status():
+    """Receives node status updates and writes them to the cache."""
+    data = request.json
+    # Frontend ID is HTML-escaped. Unescape it to match our cache dictionary keys
+    paper_id = html.unescape(data.get('id', ''))
+    new_status = data.get('status', 'none')
+
+    cache = load_cache()
+    if paper_id in cache.get("papers", {}):
+        cache["papers"][paper_id]["status"] = new_status
+        save_cache(cache)
+        return jsonify({"success": True})
+        
+    return jsonify({"error": "Paper not found in cache"}), 404
+
 @app.route('/api/graph')
 def build_graph():
-    """Builds the graph relationships entirely from the fast JSON cache."""
     target_folder = request.args.get('folder', '').strip()
     safe_folder = target_folder.replace('..', '').lstrip('/')
     
@@ -223,17 +235,17 @@ def build_graph():
     
     for rel_path, data in cached_papers.items():
         if safe_folder and safe_folder != 'global':
-            # Strict folder matching
             if not rel_path.startswith(safe_folder + '/'):
                 continue
                 
         papers.append({
             "id": html.escape(rel_path),
             "title": html.escape(data["title"]),
-            "text": html.escape(data["text"])
+            "text": html.escape(data["text"]),
+            "status": data.get("status", "none") # Provide status to frontend
         })
 
-    elements = [{"group": "nodes", "data": {"id": p["id"], "label": p["title"]}} for p in papers]
+    elements = [{"group": "nodes", "data": {"id": p["id"], "label": p["title"], "status": p["status"]}} for p in papers]
 
     for u in papers:
         u_text_lower = u["text"].lower()
@@ -285,10 +297,10 @@ def build_graph():
 
     return jsonify(elements)
 
-def open_browser(): webbrowser.open_new("http://127.0.0.1:8080")
+def open_browser(): webbrowser.open_new("http://127.0.0.1:5001")
 
 if __name__ == '__main__':
     print(f"Starting server... Place your PDFs in: {PAPERS_DIR}")
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
         threading.Timer(1.25, open_browser).start()
-    app.run(debug=True, port=8080)
+    app.run(debug=True, port=5001)
