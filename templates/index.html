@@ -9,6 +9,14 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-theme="dark">
+
+    <!-- Loading / Sync Overlay -->
+    <div id="syncOverlay">
+        <i class="fas fa-circle-notch sync-spinner"></i>
+        <h2 class="sync-title">Syncing Library...</h2>
+        <p class="sync-subtitle">LitGraph detected changes. Extracting fresh metadata.</p>
+    </div>
+
     <!-- Download Modal -->
     <div id="searchModal">
         <div class="modal-content">
@@ -20,24 +28,20 @@
         </div>
     </div>
 
-    <!-- Graph Canvas -->
     <div id="cy"></div>
     
-    <!-- Left Sidebar -->
     <div id="sidebar">
         <div class="header-container">
             <h2>LitGraph</h2>
             <button class="theme-toggle" id="themeBtn" aria-label="Toggle Theme"><i class="fas fa-sun"></i></button>
         </div>
         
-        <!-- Folder Tree Block -->
         <div class="folder-tree-container">
             <h3 style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Projects</h3>
             <div id="folderTree"></div>
         </div>
         
         <div class="controls">
-            <!-- Autocomplete Search Group -->
             <div class="input-group">
                 <div class="autocomplete-container">
                     <input type="text" id="searchInput" placeholder="Find a paper in graph..." autocomplete="off">
@@ -65,7 +69,6 @@
         </div>
     </div>
 
-    <!-- Right Sidebar for Citation Context -->
     <div id="citation-panel">
         <div class="header-container" style="margin-bottom: 20px;">
             <h2 style="font-size: 1.3rem;">Citation Context</h2>
@@ -97,7 +100,6 @@
             ];
         };
 
-        // --- Folder Logic ---
         function loadFolders() {
             fetch('/api/folders')
                 .then(res => res.json())
@@ -110,16 +112,33 @@
                         div.innerHTML = `<i class="fas ${f.id === 'global' ? 'fa-globe' : 'fa-folder'}"></i> ${f.name}`;
                         div.onclick = () => {
                             currentFolder = f.id;
-                            loadFolders(); // Re-render tree to show active state
-                            initGraph(f.path);
+                            loadFolders(); 
+                            checkAndLoadGraph(f.path); // Use the new wrapper
                         };
                         tree.appendChild(div);
                     });
                 });
         }
 
-        // --- Graph Logic ---
-        function initGraph(folderPath = '') {
+        // --- New Caching Wrapper ---
+        function checkAndLoadGraph(folderPath = '') {
+            fetch('/api/check_updates')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.needs_update) {
+                        document.getElementById('syncOverlay').style.display = 'flex';
+                        fetch('/api/build_cache', { method: 'POST' })
+                            .then(() => {
+                                document.getElementById('syncOverlay').style.display = 'none';
+                                renderGraph(folderPath);
+                            });
+                    } else {
+                        renderGraph(folderPath);
+                    }
+                });
+        }
+
+        function renderGraph(folderPath = '') {
             let url = '/api/graph';
             if (folderPath && folderPath !== 'global') {
                 url += '?folder=' + encodeURIComponent(folderPath);
@@ -178,9 +197,7 @@
         searchInput.addEventListener('input', function() {
             const val = this.value.toLowerCase().trim();
             suggestionBox.innerHTML = '';
-            
             if (!val || !window.cy) { suggestionBox.style.display = 'none'; return; }
-            
             const nodes = window.cy.nodes().filter(n => n.data('label').toLowerCase().includes(val) || n.data('id').toLowerCase().includes(val));
 
             if(nodes.length > 0) {
@@ -202,10 +219,8 @@
         window.searchNode = function() {
             suggestionBox.style.display = 'none';
             if (!window.cy) return;
-            
             const query = searchInput.value.toLowerCase().trim();
             if (!query) return;
-            
             const nodes = window.cy.nodes().filter(n => n.data('label').toLowerCase().includes(query) || n.data('id').toLowerCase().includes(query));
             
             if (nodes.length > 0) {
@@ -262,9 +277,9 @@
                 if (data.error) showError(`<i class="fas fa-exclamation-triangle"></i> ${data.error}`);
                 else { 
                     document.getElementById('urlInput').value = ''; 
-                    // Reload folders in case a new directory was targeted
                     loadFolders();
-                    initGraph(currentFolder === 'global' ? '' : currentFolder); 
+                    // Let the check wrapper seamlessly handle caching the newly downloaded file
+                    checkAndLoadGraph(currentFolder === 'global' ? '' : currentFolder); 
                 }
             }).catch(err => { btn.innerHTML = '<i class="fas fa-plus"></i>'; btn.disabled = false; showError('<i class="fas fa-wifi"></i> Network error while downloading the paper.'); });
         }
@@ -290,7 +305,7 @@
 
         // Initialize App
         loadFolders();
-        initGraph();
+        checkAndLoadGraph();
     </script>
 </body>
 </html>
