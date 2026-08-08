@@ -285,10 +285,10 @@ def build_graph():
 
     return jsonify(elements)
 
-def open_browser(): webbrowser.open_new("http://127.0.0.1:5000")
+def open_browser(): webbrowser.open_new("http://127.0.0.1:8080")
 
 if __name__ == '__main__':
     print(f"Starting server... Place your PDFs in: {PAPERS_DIR}")
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
         threading.Timer(1.25, open_browser).start()
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=8080)
