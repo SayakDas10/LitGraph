@@ -1,7 +1,7 @@
 .venv/
 venv/
 env/
-.litgraph.json/
+.litgraph.json
 # Ignore Python cache files
 __pycache__/
 *.pyc
