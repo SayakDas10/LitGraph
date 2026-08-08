@@ -1,5 +1,4 @@
 :root {
-    /* Light Mode */
     --bg-main: #f8fafc;
     --bg-sidebar: rgba(255, 255, 255, 0.75);
     --text-main: #0f172a;
@@ -17,7 +16,6 @@
 }
 
 [data-theme="dark"] {
-    /* Dark Mode */
     --bg-main: #0f172a;
     --bg-sidebar: rgba(30, 41, 59, 0.75);
     --text-main: #f8fafc;
@@ -49,7 +47,6 @@ body {
 
 #cy { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
 
-/* Left Sidebar - Search & Controls */
 #sidebar { 
     position: absolute; 
     top: 24px; 
@@ -69,7 +66,6 @@ body {
     z-index: 10;
 }
 
-/* Right Sidebar - Citation Panel */
 #citation-panel {
     position: absolute;
     top: 24px;
@@ -109,6 +105,40 @@ h2 { margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.03em; }
     box-shadow: 0 4px 6px -1px var(--shadow-color); 
 }
 .theme-toggle:hover, .close-btn:hover { background: var(--highlight); color: #fff; transform: translateY(-2px); box-shadow: 0 10px 15px -3px var(--shadow-color); }
+
+/* Folder Tree Styles */
+.folder-tree-container {
+    max-height: 25vh;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+.folder-item {
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+.folder-item:hover {
+    background: var(--context-bg);
+    color: var(--text-main);
+}
+.folder-item.active {
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--highlight);
+    font-weight: 600;
+}
+.folder-item i {
+    font-size: 1.1rem;
+}
 
 .controls { margin-bottom: 24px; display: flex; flex-direction: column; gap: 14px; }
 .input-group { display: flex; gap: 10px; position: relative; }
@@ -179,3 +209,38 @@ h2 { margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.03em; }
 .result-source { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; display: inline-block; padding: 4px 10px; border-radius: 999px; background: rgba(99, 102, 241, 0.1); color: var(--highlight); width: fit-content;}
 .download-btn { align-self: flex-start; background: var(--highlight); color: #fff; border: none; padding: 10px 20px; border-radius: 999px; cursor: pointer; font-weight: 600; margin-top: 8px; transition: all 0.3s; }
 .download-btn:hover { background: var(--highlight-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); }
+
+#syncOverlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; width: 100vw; height: 100vh;
+    background: var(--modal-bg);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    color: var(--text-main);
+}
+
+.sync-spinner {
+    font-size: 4rem;
+    color: var(--highlight);
+    margin-bottom: 24px;
+    animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+.sync-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0 0 10px 0;
+}
+
+.sync-subtitle {
+    color: var(--text-muted);
+    font-size: 1rem;
+    margin: 0;
+}
