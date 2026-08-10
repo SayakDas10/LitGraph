@@ -74,7 +74,6 @@ def add_local_paper():
     new_folder = data.get('new_folder', '').strip()
     action = data.get('action', 'copy') 
     
-    # Strip quotes in case user uses "Copy as Path" in Windows
     source_path = source_path.strip('\"\'')
     
     if not source_path or not os.path.exists(source_path):
@@ -83,7 +82,6 @@ def add_local_paper():
     if not source_path.lower().endswith('.pdf'):
         return jsonify({"error": "The selected file is not a PDF."}), 400
         
-    # Determine the target directory
     if new_folder:
         safe_new = new_folder.replace('..', '').lstrip('/')
         target_dir = os.path.join(PAPERS_DIR, safe_new)
@@ -110,6 +108,46 @@ def add_local_paper():
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": f"Failed to {action} file: {str(e)}"}), 500
+
+@app.route('/api/import_library', methods=['POST'])
+def import_library():
+    data = request.json
+    source_path = data.get('source_path', '').strip().strip('\"\'')
+    action = data.get('action', 'copy')
+    
+    if not source_path or not os.path.exists(source_path) or not os.path.isdir(source_path):
+        return jsonify({"error": "Invalid folder path. Please provide a valid absolute directory path."}), 400
+        
+    # Prevent importing the target folder into itself
+    if os.path.abspath(source_path) == os.path.abspath(PAPERS_DIR):
+        return jsonify({"error": "Cannot import the destination folder into itself."}), 400
+        
+    imported_count = 0
+    try:
+        for root, dirs, files in os.walk(source_path):
+            for file in files:
+                if file.lower().endswith('.pdf'):
+                    # Recreate internal folder structure
+                    rel_dir = os.path.relpath(root, source_path)
+                    if rel_dir == '.':
+                        target_dir = PAPERS_DIR
+                    else:
+                        target_dir = os.path.join(PAPERS_DIR, rel_dir)
+                        os.makedirs(target_dir, exist_ok=True)
+                    
+                    src_file = os.path.join(root, file)
+                    dst_file = os.path.join(target_dir, file)
+                    
+                    # Skip if the file already exists in the destination to prevent overwrites
+                    if not os.path.exists(dst_file):
+                        if action == 'move':
+                            shutil.move(src_file, dst_file)
+                        else:
+                            shutil.copy2(src_file, dst_file)
+                        imported_count += 1
+        return jsonify({"success": True, "count": imported_count})
+    except Exception as e:
+        return jsonify({"error": f"Failed during {action}: {str(e)}"}), 500
 
 @app.route('/api/check_updates')
 def check_updates():
