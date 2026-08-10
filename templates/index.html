@@ -26,9 +26,10 @@
         </div>
     </div>
 
-    <!-- Floating Node Action Menu -->
+    <!-- Floating Node Action Menu (Now with Rename) -->
     <div id="nodeMenu" class="node-menu">
         <button id="btnOpenPdf"><i class="fas fa-external-link-alt"></i> Open PDF</button>
+        <button id="btnEditTitle"><i class="fas fa-edit"></i> Rename</button>
         <button id="btnMarkRead"><i class="fas fa-check-circle"></i> Read</button>
         <button id="btnMarkPrioritize"><i class="fas fa-star"></i> Prioritize</button>
     </div>
@@ -67,7 +68,7 @@
         <div id="info">
             <div class="empty-state">
                 <div class="instruction"><i class="fas fa-folder-open"></i> Select a folder to filter the graph.</div>
-                <div class="instruction"><i class="fas fa-mouse-pointer"></i> Click a node to open options (Read/Prioritize).</div>
+                <div class="instruction"><i class="fas fa-mouse-pointer"></i> Click a node to open options (Rename, Read, etc).</div>
                 <div class="instruction"><i class="fas fa-project-diagram"></i> Click curved edges to read the exact citation context.</div>
             </div>
         </div>
@@ -98,7 +99,6 @@
             return [
                 { selector: 'node', style: { 'shape': 'round-rectangle', 'background-color': nodeColor, 'label': 'data(label)', 'color': labelColor, 'font-size': '13px', 'font-family': 'Inter, sans-serif', 'font-weight': '600', 'text-valign': 'center', 'text-halign': 'center', 'text-wrap': 'wrap', 'text-max-width': '160px', 'padding': '14px', 'width': 'label', 'height': 'label', 'corner-radius': '100px', 'border-width': 1, 'border-color': edgeColor, 'shadow-blur': 15, 'shadow-color': shadowColor, 'shadow-opacity': dark ? 0.6 : 0.15, 'shadow-offset-y': 6, 'shadow-offset-x': 0, 'cursor': 'pointer', 'z-index': 10, 'transition-property': 'background-color, shadow-blur, border-color, color, transform', 'transition-duration': '0.3s' } },
                 
-                /* State Colors for Nodes */
                 { selector: 'node[status = "read"]', style: { 'background-color': '#22c55e', 'border-color': '#16a34a', 'color': '#ffffff', 'shadow-color': '#22c55e' } },
                 { selector: 'node[status = "prioritize"]', style: { 'background-color': '#eab308', 'border-color': '#ca8a04', 'color': '#0f172a', 'shadow-color': '#eab308' } },
                 
@@ -163,7 +163,6 @@
                         minZoom: 0.15, maxZoom: 2.5 
                     });
 
-                    // Hover effects
                     window.cy.on('mouseover', 'node', function(evt){
                         var node = evt.target; window.cy.elements().addClass('faded'); node.removeClass('faded').addClass('highlighted-node'); node.connectedEdges().removeClass('faded').addClass('highlighted-edge'); node.connectedEdges().connectedNodes().removeClass('faded').addClass('highlighted-node');
                     });
@@ -172,17 +171,14 @@
                         var edge = evt.target; window.cy.elements().addClass('faded'); edge.removeClass('faded').addClass('highlighted-edge'); edge.connectedNodes().removeClass('faded').addClass('highlighted-node');
                     });
 
-                    // Display Node Context Menu
                     window.cy.on('tap', 'node', function(evt){
                         var node = evt.target;
                         showNodeMenu(node, evt.renderedPosition);
                     });
 
-                    // Hide Node Menu when clicking background, panning, or zooming
                     window.cy.on('tap', function(evt){ if (evt.target === window.cy) hideNodeMenu(); });
                     window.cy.on('pan zoom', function() { hideNodeMenu(); });
                     
-                    // Display Citation Panel on Edge Click
                     window.cy.on('tap', 'edge', function(evt){
                         hideNodeMenu();
                         var edge = evt.target;
@@ -206,20 +202,35 @@
                 });
         }
         
-        // --- Node Menu Logic ---
         function showNodeMenu(node, pos) {
             const menu = document.getElementById('nodeMenu');
             menu.style.display = 'flex';
-            // Position near the click, offsetting so it doesn't cover the mouse
             menu.style.left = (pos.x + 15) + 'px';
             menu.style.top = (pos.y + 15) + 'px';
 
             const nodeId = node.id();
             const currentStatus = node.data('status');
+            const currentTitle = node.data('label');
 
             document.getElementById('btnOpenPdf').onclick = () => {
                 window.open('/papers/' + encodeURIComponent(nodeId), '_blank');
                 hideNodeMenu();
+            };
+
+            // Manual Edit Title Logic
+            document.getElementById('btnEditTitle').onclick = () => {
+                hideNodeMenu();
+                const newTitle = prompt("Enter a new title for this paper:", currentTitle);
+                
+                if (newTitle && newTitle.trim() !== "" && newTitle !== currentTitle) {
+                    node.data('label', newTitle.trim()); // Update UI instantly
+                    
+                    fetch('/api/update_title', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: nodeId, title: newTitle.trim() })
+                    });
+                }
             };
 
             const btnRead = document.getElementById('btnMarkRead');
@@ -236,14 +247,9 @@
         }
 
         function toggleNodeStatus(node, targetType) {
-            // If already the target type, toggle it off to 'none'. Otherwise, set to target.
             let newStatus = (node.data('status') === targetType) ? 'none' : targetType;
-            
-            // Instantly update the graph UI
             node.data('status', newStatus);
             hideNodeMenu();
-
-            // Send silent request to update JSON Cache
             fetch('/api/update_status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

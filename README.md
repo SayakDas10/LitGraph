@@ -106,6 +106,10 @@ The backend includes active mitigations against Cross-Site Scripting (XSS) and M
 
 ---
 
+## Change Log
+- Aug 10, 26: Fixed paper naming issue. Verify name with semantic scholar. Give user the option to change paper name. 
+- Aug 8, 26: Added folder support. Read, prioritize options to paper. Implemented local cache for faster initial load.
+
 ## 🤝 Contributing
 
 Contributions, issues, and feature requests are highly welcome! Feel free to check the [issues page](https://www.google.com/search?q=https://github.com/yourusername/LitGraph/issues) if you want to contribute to the heuristic extraction engine or UI enhancements.

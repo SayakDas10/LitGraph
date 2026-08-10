@@ -145,7 +145,6 @@ def check_updates():
                 current_files[rel_path] = os.path.getmtime(path)
                 
     needs_update = False
-    
     for rel_path, mtime in current_files.items():
         if rel_path not in cached_papers or cached_papers[rel_path]['mtime'] < mtime:
             needs_update = True
@@ -179,21 +178,37 @@ def build_cache():
             new_cache_papers[rel_path] = cached_papers[rel_path]
         else:
             abs_path = os.path.join(PAPERS_DIR, rel_path)
-            # Preserve previous status if file was modified, otherwise set to 'none'
             existing_status = cached_papers.get(rel_path, {}).get("status", "none")
             try:
                 doc = pymupdf.open(abs_path)
                 text = re.sub(r'\s+', ' ', " ".join([page.get_text() for page in doc]))
-                title = doc.metadata.get("title", "").strip()
-                if not title or title.isnumeric() or len(title) < 5 or title.lower().endswith('.pdf'):
-                    first_page_lines = doc[0].get_text("text").split('\n')
-                    for line in first_page_lines:
-                        clean_line = line.strip()
-                        if len(clean_line) > 10 and not clean_line.isnumeric():
-                            title = clean_line
-                            break
+                title = None
+                
+                # Option 1: Automated API Cross-Referencing
+                try:
+                    # Extract first 150 chars, stripping weird symbols
+                    first_page_text = re.sub(r'[^a-zA-Z0-9\s]', ' ', doc[0].get_text("text"))[:150].strip()
+                    if first_page_text:
+                        s2_url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={first_page_text}&limit=1&fields=title"
+                        s2_res = requests.get(s2_url, timeout=4).json()
+                        if 'data' in s2_res and len(s2_res['data']) > 0:
+                            title = s2_res['data'][0]['title']
+                    time.sleep(0.5) # Gentle rate-limiting
+                except:
+                    pass
+                
+                # Fallback to local heuristic metadata extraction
                 if not title:
-                    title = os.path.basename(rel_path).rsplit('.', 1)[0]
+                    title = doc.metadata.get("title", "").strip()
+                    if not title or title.isnumeric() or len(title) < 5 or title.lower().endswith('.pdf'):
+                        first_page_lines = doc[0].get_text("text").split('\n')
+                        for line in first_page_lines:
+                            clean_line = line.strip()
+                            if len(clean_line) > 10 and not clean_line.isnumeric():
+                                title = clean_line
+                                break
+                    if not title:
+                        title = os.path.basename(rel_path).rsplit('.', 1)[0]
                 
                 new_cache_papers[rel_path] = {
                     "mtime": mtime,
@@ -210,19 +225,32 @@ def build_cache():
 
 @app.route('/api/update_status', methods=['POST'])
 def update_status():
-    """Receives node status updates and writes them to the cache."""
     data = request.json
-    # Frontend ID is HTML-escaped. Unescape it to match our cache dictionary keys
     paper_id = html.unescape(data.get('id', ''))
     new_status = data.get('status', 'none')
-
     cache = load_cache()
     if paper_id in cache.get("papers", {}):
         cache["papers"][paper_id]["status"] = new_status
         save_cache(cache)
         return jsonify({"success": True})
+    return jsonify({"error": "Paper not found"}), 404
+
+# Option 2: Endpoint for Manual Title Override
+@app.route('/api/update_title', methods=['POST'])
+def update_title():
+    data = request.json
+    paper_id = html.unescape(data.get('id', ''))
+    new_title = data.get('title', '').strip()
+    
+    if not new_title:
+        return jsonify({"error": "Title cannot be empty"}), 400
         
-    return jsonify({"error": "Paper not found in cache"}), 404
+    cache = load_cache()
+    if paper_id in cache.get("papers", {}):
+        cache["papers"][paper_id]["title"] = new_title
+        save_cache(cache)
+        return jsonify({"success": True})
+    return jsonify({"error": "Paper not found"}), 404
 
 @app.route('/api/graph')
 def build_graph():
@@ -237,12 +265,11 @@ def build_graph():
         if safe_folder and safe_folder != 'global':
             if not rel_path.startswith(safe_folder + '/'):
                 continue
-                
         papers.append({
             "id": html.escape(rel_path),
             "title": html.escape(data["title"]),
             "text": html.escape(data["text"]),
-            "status": data.get("status", "none") # Provide status to frontend
+            "status": data.get("status", "none")
         })
 
     elements = [{"group": "nodes", "data": {"id": p["id"], "label": p["title"], "status": p["status"]}} for p in papers]
