@@ -107,6 +107,7 @@ The backend includes active mitigations against Cross-Site Scripting (XSS) and M
 ---
 
 ## Change Log
+- Aug 10, 26: Added note taking. User can take basic text notes or upload ppt, pdf, docx, md, txt note files. Each paper has unique id that the note maps to. All saved locally.
 - Aug 10, 26: Fixed paper naming issue. Verify name with semantic scholar. Give user the option to change paper name. 
 - Aug 8, 26: Added folder support. Read, prioritize options to paper. Implemented local cache for faster initial load.
 
