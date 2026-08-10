@@ -16,13 +16,42 @@
         <p class="sync-subtitle">LitGraph detected changes. Extracting fresh metadata.</p>
     </div>
 
-    <div id="searchModal">
+    <!-- Local File Upload Modal -->
+    <div id="localFileModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 style="margin:0; font-weight:700;">Select a paper to download</h3>
-                <button class="close-modal" onclick="closeModal()"><i class="fas fa-times"></i></button>
+                <h3 style="margin:0; font-weight:700;">Add Local Paper</h3>
+                <button class="close-modal" onclick="closeLocalModal()"><i class="fas fa-times"></i></button>
             </div>
-            <div id="modalResults"></div>
+            
+            <div class="form-group">
+                <label>Absolute File Path to PDF</label>
+                <input type="text" id="localFilePath" class="form-control" placeholder="e.g. /Users/name/Downloads/paper.pdf">
+            </div>
+
+            <div class="form-group">
+                <label>Destination Folder</label>
+                <select id="localFolderSelect" class="form-control"></select>
+            </div>
+
+            <div class="form-group">
+                <label>Or Create a New Folder</label>
+                <input type="text" id="localNewFolder" class="form-control" placeholder="New Folder Name...">
+            </div>
+
+            <div class="form-group">
+                <label>Action</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="fileAction" value="copy" checked> Copy File
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="fileAction" value="move"> Move File
+                    </label>
+                </div>
+            </div>
+
+            <button id="submitLocalBtn" class="submit-btn" onclick="submitLocalPaper()">Add Paper</button>
         </div>
     </div>
 
@@ -48,13 +77,10 @@
                 <button onclick="searchNode()" title="Search"><i class="fas fa-search"></i></button>
             </div>
             
-            <div class="input-group">
-                <div class="autocomplete-container">
-                    <input type="text" id="urlInput" placeholder="Paste URL or citation..." onkeypress="if(event.key === 'Enter') handleAddPaper()">
-                </div>
-                <button onclick="handleAddPaper()" id="addBtn" title="Download & Add"><i class="fas fa-plus"></i></button>
-            </div>
-            <div id="errorMessage" class="error-message"></div>
+            <!-- Replaced URL download with Local UI Trigger -->
+            <button class="action-btn" style="width: 100%; flex-direction: row; justify-content: center; padding: 14px;" onclick="openLocalModal()">
+                <i class="fas fa-file-import"></i> Add Local Paper
+            </button>
         </div>
 
         <div id="info">
@@ -109,7 +135,7 @@
         let isDark = true;
         window.cy = null;
         let currentFolder = 'global';
-        let currentNodeData = null; // Stores data for the actively viewed node
+        let currentNodeData = null; 
         
         const getStyleSheet = (dark) => {
             const nodeColor = dark ? '#1e293b' : '#ffffff'; 
@@ -130,6 +156,7 @@
             ];
         };
 
+        // --- Folders & Modal Logic ---
         function loadFolders() {
             fetch('/api/folders')
                 .then(res => res.json())
@@ -148,6 +175,62 @@
                         tree.appendChild(div);
                     });
                 });
+        }
+
+        function openLocalModal() {
+            fetch('/api/folders').then(res => res.json()).then(folders => {
+                const select = document.getElementById('localFolderSelect');
+                select.innerHTML = '';
+                folders.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = f.id;
+                    opt.innerText = f.name;
+                    if (f.id === currentFolder) opt.selected = true;
+                    select.appendChild(opt);
+                });
+                document.getElementById('localFileModal').style.display = 'flex';
+            });
+        }
+
+        function closeLocalModal() {
+            document.getElementById('localFileModal').style.display = 'none';
+        }
+
+        function submitLocalPaper() {
+            const path = document.getElementById('localFilePath').value;
+            const folder = document.getElementById('localFolderSelect').value;
+            const newFolder = document.getElementById('localNewFolder').value;
+            const action = document.querySelector('input[name="fileAction"]:checked').value;
+            
+            if (!path) { alert('Please provide the absolute path to the PDF.'); return; }
+            
+            const btn = document.getElementById('submitLocalBtn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            btn.disabled = true;
+            
+            fetch('/api/add_local_paper', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source_path: path, folder_select: folder, new_folder: newFolder, action: action })
+            }).then(res => res.json()).then(data => {
+                btn.innerHTML = 'Add Paper';
+                btn.disabled = false;
+                
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    closeLocalModal();
+                    document.getElementById('localFilePath').value = '';
+                    document.getElementById('localNewFolder').value = '';
+                    
+                    loadFolders();
+                    checkAndLoadGraph(newFolder ? newFolder : (folder === 'global' ? '' : folder));
+                }
+            }).catch(err => {
+                btn.innerHTML = 'Add Paper';
+                btn.disabled = false;
+                alert("Network error processing local file.");
+            });
         }
 
         function checkAndLoadGraph(folderPath = '') {
@@ -189,15 +272,8 @@
                     var edge = evt.target; window.cy.elements().addClass('faded'); edge.removeClass('faded').addClass('highlighted-edge'); edge.connectedNodes().removeClass('faded').addClass('highlighted-node');
                 });
 
-                // Tapping Node -> Show Node Panel
-                window.cy.on('tap', 'node', function(evt){
-                    showNodePanel(evt.target);
-                });
-
-                // Tapping Edge -> Show Citation Panel
-                window.cy.on('tap', 'edge', function(evt){
-                    showEdgePanel(evt.target);
-                });
+                window.cy.on('tap', 'node', function(evt){ showNodePanel(evt.target); });
+                window.cy.on('tap', 'edge', function(evt){ showEdgePanel(evt.target); });
             });
         }
 
@@ -210,7 +286,6 @@
             document.getElementById('node-view').style.display = 'flex';
             document.getElementById('panelTitle').innerText = node.data('label');
             
-            // Buttons logic
             document.getElementById('btnOpenPdf').onclick = () => window.open('/papers/' + encodeURIComponent(node.id()), '_blank');
             
             document.getElementById('btnEditTitle').onclick = () => {
@@ -230,8 +305,7 @@
             btnPrioritize.className = 'action-btn ' + (node.data('status') === 'prioritize' ? 'active-prioritize' : '');
             btnPrioritize.onclick = () => toggleNodeStatus(node, 'prioritize');
 
-            // Lazy Load Notes & Attachments
-            document.getElementById('nodeTextNote').value = "";
+            document.getElementById('nodeTextNote').value = "Loading notes...";
             document.getElementById('attachmentList').innerHTML = "";
             
             fetch('/api/node_details/' + uuid)
@@ -245,7 +319,7 @@
         }
 
         function showEdgePanel(edge) {
-            currentNodeData = null; // Clear context
+            currentNodeData = null; 
             document.getElementById('node-view').style.display = 'none';
             document.getElementById('edge-view').style.display = 'block';
             document.getElementById('panelTitle').innerText = "Citation Context";
@@ -314,7 +388,6 @@
                 .then(data => {
                     dropZone.innerHTML = '<i class="fas fa-cloud-upload-alt" style="font-size: 1.5rem; margin-bottom: 8px; display: block;"></i> Drag & Drop or click to attach<br><small style="opacity:0.7">ppt, docx, txt, pdf, md</small>';
                     if (data.success) {
-                        // Reload attachments quietly
                         fetch('/api/node_details/' + currentNodeData.data('uuid'))
                             .then(res => res.json())
                             .then(d => renderAttachments(d.attachments));
@@ -393,64 +466,6 @@
 
         searchInput.addEventListener('keypress', function(e) { if(e.key === 'Enter') { e.preventDefault(); searchNode(); } });
         document.addEventListener('click', function(e) { if (e.target !== searchInput && e.target !== suggestionBox) suggestionBox.style.display = 'none'; });
-
-        function showError(msg) {
-            const errDiv = document.getElementById('errorMessage'); errDiv.innerHTML = msg; errDiv.style.display = 'block';
-            setTimeout(() => { errDiv.style.display = 'none'; }, 8000); 
-        }
-
-        window.handleAddPaper = function() {
-            const inputVal = document.getElementById('urlInput').value.trim();
-            if (!inputVal) return;
-            const btn = document.getElementById('addBtn'); btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true;
-            document.getElementById('errorMessage').style.display = 'none';
-
-            if (inputVal.startsWith('http') || inputVal.includes('.pdf') || inputVal.includes('arxiv.org')) {
-                executeDownload(inputVal);
-            } else {
-                fetch('/api/search_paper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: inputVal }) })
-                .then(res => res.json())
-                .then(results => {
-                    btn.innerHTML = '<i class="fas fa-plus"></i>'; btn.disabled = false;
-                    if (results.length === 0) showError("Could not find any Open Access PDFs for this citation.");
-                    else if (results.length === 1) executeDownload(results[0].pdf_url);
-                    else showModal(results);
-                }).catch(err => { btn.innerHTML = '<i class="fas fa-plus"></i>'; btn.disabled = false; showError('<i class="fas fa-exclamation-circle"></i> Error searching for citation.'); });
-            }
-        };
-
-        function executeDownload(url) {
-            const btn = document.getElementById('addBtn'); btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true;
-            closeModal();
-            fetch('/api/add_paper', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ url: url, folder: currentFolder === 'global' ? '' : currentFolder }) 
-            })
-            .then(res => res.json())
-            .then(data => {
-                btn.innerHTML = '<i class="fas fa-plus"></i>'; btn.disabled = false;
-                if (data.error) showError(`<i class="fas fa-exclamation-triangle"></i> ${data.error}`);
-                else { 
-                    document.getElementById('urlInput').value = ''; 
-                    loadFolders();
-                    checkAndLoadGraph(currentFolder === 'global' ? '' : currentFolder); 
-                }
-            }).catch(err => { btn.innerHTML = '<i class="fas fa-plus"></i>'; btn.disabled = false; showError('<i class="fas fa-wifi"></i> Network error while downloading the paper.'); });
-        }
-
-        function showModal(results) {
-            const container = document.getElementById('modalResults'); container.innerHTML = '';
-            results.forEach(res => {
-                const div = document.createElement('div'); div.className = 'search-result';
-                div.innerHTML = `<div class="result-source"><i class="fas fa-database"></i> ${res.source}</div><div class="result-title">${res.title}</div><div class="result-authors">${res.authors}</div><button class="download-btn" onclick="executeDownload('${res.pdf_url}')"><i class="fas fa-download"></i> Download</button>`;
-                container.appendChild(div);
-            });
-            document.getElementById('searchModal').style.display = 'flex';
-        }
-        
-        window.closeModal = function() { document.getElementById('searchModal').style.display = 'none'; }
-        window.onclick = function(event) { if (event.target == document.getElementById('searchModal')) closeModal(); }
 
         themeBtn.addEventListener('click', () => {
             isDark = !isDark; document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');

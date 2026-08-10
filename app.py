@@ -8,8 +8,7 @@ import threading
 import html
 import json
 import uuid
-import xml.etree.ElementTree as ET
-from urllib.parse import urlparse, unquote
+import shutil
 from werkzeug.utils import secure_filename
 from flask import Flask, jsonify, send_from_directory, render_template, request
 
@@ -67,82 +66,50 @@ def get_folders():
         })
     return jsonify(folders)
 
-@app.route('/api/search_paper', methods=['POST'])
-def search_paper():
-    query = request.json.get('query')
-    if not query: return jsonify([])
-    results = []
-    
-    try:
-        s2_url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={query}&limit=3&fields=title,authors,openAccessPdf"
-        s2_res = requests.get(s2_url, timeout=6).json()
-        if 'data' in s2_res:
-            for item in s2_res['data']:
-                if item.get('openAccessPdf') and item['openAccessPdf'].get('url'):
-                    safe_title = html.escape(item.get('title', 'Unknown Title'))
-                    safe_authors = html.escape(", ".join([a['name'] for a in item.get('authors', [])]))
-                    results.append({ 'title': safe_title, 'authors': safe_authors, 'pdf_url': item['openAccessPdf']['url'], 'source': 'Semantic Scholar' })
-    except: pass
-
-    try:
-        arxiv_url = f"http://export.arxiv.org/api/query?search_query=all:{query}&max_results=3"
-        arxiv_res = requests.get(arxiv_url, timeout=6).text
-        root = ET.fromstring(arxiv_res)
-        ns = {'atom': 'http://www.w3.org/2005/Atom'}
-        for entry in root.findall('atom:entry', ns):
-            title = entry.find('atom:title', ns).text.replace('\n', ' ').strip()
-            authors = [a.find('atom:name', ns).text for a in entry.findall('atom:author', ns)]
-            pdf_link = next((link.attrib.get('href') for link in entry.findall('atom:link', ns) if link.attrib.get('title') == 'pdf'), None)
-            if pdf_link:
-                if not pdf_link.endswith('.pdf'): pdf_link += '.pdf'
-                safe_title = html.escape(title)
-                safe_authors = html.escape(", ".join(authors))
-                if not any(r['title'].lower() == safe_title.lower() for r in results):
-                    results.append({ 'title': safe_title, 'authors': safe_authors, 'pdf_url': pdf_link, 'source': 'arXiv' })
-    except: pass
-    return jsonify(results)
-
-@app.route('/api/add_paper', methods=['POST'])
-def add_paper():
+@app.route('/api/add_local_paper', methods=['POST'])
+def add_local_paper():
     data = request.json
-    url = data.get('url', '').strip()
-    target_folder = data.get('folder', '').strip()
+    source_path = data.get('source_path', '').strip()
+    folder_select = data.get('folder_select', '').strip()
+    new_folder = data.get('new_folder', '').strip()
+    action = data.get('action', 'copy') 
     
-    if not url: return jsonify({"error": "No URL provided"}), 400
-    if not url.startswith('http://') and not url.startswith('https://'): url = 'https://' + url
-    if 'arxiv.org/abs/' in url: url = url.replace('arxiv.org/abs/', 'arxiv.org/pdf/')
-    if 'arxiv.org/pdf/' in url and not url.endswith('.pdf'): url += '.pdf'
+    # Strip quotes in case user uses "Copy as Path" in Windows
+    source_path = source_path.strip('\"\'')
     
+    if not source_path or not os.path.exists(source_path):
+        return jsonify({"error": "File not found. Please check the absolute path."}), 400
+        
+    if not source_path.lower().endswith('.pdf'):
+        return jsonify({"error": "The selected file is not a PDF."}), 400
+        
+    # Determine the target directory
+    if new_folder:
+        safe_new = new_folder.replace('..', '').lstrip('/')
+        target_dir = os.path.join(PAPERS_DIR, safe_new)
+    else:
+        safe_existing = folder_select.replace('..', '').lstrip('/')
+        if safe_existing == 'global' or not safe_existing:
+            target_dir = PAPERS_DIR
+        else:
+            target_dir = os.path.join(PAPERS_DIR, safe_existing)
+            
+    os.makedirs(target_dir, exist_ok=True)
+    
+    filename = os.path.basename(source_path)
+    dest_path = os.path.join(target_dir, filename)
+    
+    if os.path.exists(dest_path):
+        return jsonify({"error": "A file with this name already exists in the target folder."}), 400
+        
     try:
-        headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/pdf,application/xhtml+xml' }
-        r = requests.get(url, headers=headers, stream=True, timeout=10)
-        
-        if r.status_code == 403: return jsonify({"error": f"Publisher firewall blocked the download. Please download manually."}), 400
-        r.raise_for_status()
-        
-        iterator = r.iter_content(chunk_size=8192)
-        try: first_chunk = next(iterator)
-        except StopIteration: return jsonify({"error": "The downloaded file was empty."}), 400
-            
-        if not first_chunk.startswith(b'%PDF-'):
-            return jsonify({"error": "File signature invalid. The link did not return a genuine PDF file."}), 400
-            
-        parsed = urlparse(url)
-        filename = os.path.basename(unquote(parsed.path))
-        if not filename.lower().endswith('.pdf'): filename = f"download_{int(time.time())}.pdf"
-            
-        safe_folder = target_folder.replace('..', '').lstrip('/')
-        save_dir = os.path.join(PAPERS_DIR, safe_folder)
-        os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(save_dir, filename)
-        
-        with open(save_path, 'wb') as f:
-            f.write(first_chunk)
-            for chunk in iterator: f.write(chunk)
-                
-        return jsonify({"success": True, "filename": html.escape(filename)})
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Download failed: {html.escape(str(e))}"}), 500
+        if action == 'move':
+            shutil.move(source_path, dest_path)
+        else:
+            shutil.copy2(source_path, dest_path)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": f"Failed to {action} file: {str(e)}"}), 500
 
 @app.route('/api/check_updates')
 def check_updates():
@@ -185,11 +152,10 @@ def build_cache():
                 current_files[rel_path] = os.path.getmtime(path)
                 
     new_cache_papers = {}
-    texts = {} # Temporary in-memory holder for text to pre-compute edges
+    texts = {} 
     
     for rel_path, mtime in current_files.items():
         abs_path = os.path.join(PAPERS_DIR, rel_path)
-        
         text = ""
         doc = None
         try:
@@ -237,7 +203,6 @@ def build_cache():
                 "status": existing_status
             }
             
-    # --- Pre-compute all edges in memory (O(N^2)) ---
     edges = []
     for u_rel_path, u_data in new_cache_papers.items():
         u_text = texts.get(u_rel_path, "")
@@ -270,7 +235,6 @@ def build_cache():
                 bib_start = max(0, title_idx - 80)
                 bib_end = min(len(u_text), title_idx + len(v_data["title"]) + 120)
                 
-                # HTML Escape raw text before formatting the context snippet
                 safe_bib_entry = html.escape("... " + u_text[bib_start:bib_end].strip() + " ...")
                 safe_v_title = html.escape(v_data['title'][:40])
                 
@@ -303,7 +267,7 @@ def build_cache():
                 
     cache["papers"] = new_cache_papers
     cache["edges"] = edges
-    save_cache(cache) # We save metadata and edges, the giant 'texts' dictionary is discarded!
+    save_cache(cache) 
     return jsonify({"success": True})
 
 @app.route('/api/update_status', methods=['POST'])
