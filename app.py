@@ -7,16 +7,25 @@ import webbrowser
 import threading
 import html
 import json
+import uuid
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, unquote
+from werkzeug.utils import secure_filename
 from flask import Flask, jsonify, send_from_directory, render_template, request
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PAPERS_DIR = os.path.join(BASE_DIR, 'papers')
+NOTES_DIR = os.path.join(BASE_DIR, 'notes')
 CACHE_FILE = os.path.join(BASE_DIR, '.litgraph.json')
 
 os.makedirs(PAPERS_DIR, exist_ok=True)
+os.makedirs(NOTES_DIR, exist_ok=True)
+
+ALLOWED_EXTENSIONS = {'ppt', 'pptx', 'docx', 'txt', 'pdf', 'md'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def load_cache():
     if os.path.exists(CACHE_FILE):
@@ -38,6 +47,10 @@ def index():
 @app.route('/papers/<path:filename>')
 def serve_paper(filename):
     return send_from_directory(PAPERS_DIR, filename)
+
+@app.route('/notes/<path:filename>')
+def serve_note(filename):
+    return send_from_directory(NOTES_DIR, filename)
 
 @app.route('/api/folders')
 def get_folders():
@@ -179,25 +192,24 @@ def build_cache():
         else:
             abs_path = os.path.join(PAPERS_DIR, rel_path)
             existing_status = cached_papers.get(rel_path, {}).get("status", "none")
+            # Assign a permanent unique ID to this paper if it doesn't have one
+            existing_uuid = cached_papers.get(rel_path, {}).get("uuid", uuid.uuid4().hex)
+            
             try:
                 doc = pymupdf.open(abs_path)
                 text = re.sub(r'\s+', ' ', " ".join([page.get_text() for page in doc]))
                 title = None
                 
-                # Option 1: Automated API Cross-Referencing
                 try:
-                    # Extract first 150 chars, stripping weird symbols
                     first_page_text = re.sub(r'[^a-zA-Z0-9\s]', ' ', doc[0].get_text("text"))[:150].strip()
                     if first_page_text:
                         s2_url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={first_page_text}&limit=1&fields=title"
                         s2_res = requests.get(s2_url, timeout=4).json()
                         if 'data' in s2_res and len(s2_res['data']) > 0:
                             title = s2_res['data'][0]['title']
-                    time.sleep(0.5) # Gentle rate-limiting
-                except:
-                    pass
+                    time.sleep(0.5) 
+                except: pass
                 
-                # Fallback to local heuristic metadata extraction
                 if not title:
                     title = doc.metadata.get("title", "").strip()
                     if not title or title.isnumeric() or len(title) < 5 or title.lower().endswith('.pdf'):
@@ -207,10 +219,10 @@ def build_cache():
                             if len(clean_line) > 10 and not clean_line.isnumeric():
                                 title = clean_line
                                 break
-                    if not title:
-                        title = os.path.basename(rel_path).rsplit('.', 1)[0]
+                    if not title: title = os.path.basename(rel_path).rsplit('.', 1)[0]
                 
                 new_cache_papers[rel_path] = {
+                    "uuid": existing_uuid,
                     "mtime": mtime,
                     "title": title,
                     "text": text,
@@ -235,22 +247,67 @@ def update_status():
         return jsonify({"success": True})
     return jsonify({"error": "Paper not found"}), 404
 
-# Option 2: Endpoint for Manual Title Override
 @app.route('/api/update_title', methods=['POST'])
 def update_title():
     data = request.json
     paper_id = html.unescape(data.get('id', ''))
     new_title = data.get('title', '').strip()
-    
-    if not new_title:
-        return jsonify({"error": "Title cannot be empty"}), 400
-        
+    if not new_title: return jsonify({"error": "Title cannot be empty"}), 400
     cache = load_cache()
     if paper_id in cache.get("papers", {}):
         cache["papers"][paper_id]["title"] = new_title
         save_cache(cache)
         return jsonify({"success": True})
     return jsonify({"error": "Paper not found"}), 404
+
+# --- New Lazy Loading Endpoints for Notes ---
+
+@app.route('/api/node_details/<paper_uuid>')
+def node_details(paper_uuid):
+    # Fetch Text Note
+    txt_path = os.path.join(NOTES_DIR, f"{paper_uuid}.txt")
+    text_content = ""
+    if os.path.exists(txt_path):
+        with open(txt_path, 'r', encoding='utf-8') as f:
+            text_content = f.read()
+            
+    # Fetch Attachments
+    attachments = []
+    prefix = f"{paper_uuid}_attachment_"
+    for f in os.listdir(NOTES_DIR):
+        if f.startswith(prefix):
+            original_name = f[len(prefix):]
+            attachments.append({"filename": html.escape(f), "original_name": html.escape(original_name)})
+            
+    return jsonify({"text": text_content, "attachments": attachments})
+
+@app.route('/api/save_note', methods=['POST'])
+def save_note():
+    data = request.json
+    paper_uuid = data.get('uuid')
+    text = data.get('text', '')
+    if not paper_uuid: return jsonify({"error": "No UUID provided"}), 400
+    
+    txt_path = os.path.join(NOTES_DIR, f"{paper_uuid}.txt")
+    with open(txt_path, 'w', encoding='utf-8') as f:
+        f.write(text)
+    return jsonify({"success": True})
+
+@app.route('/api/upload_attachment', methods=['POST'])
+def upload_attachment():
+    if 'file' not in request.files: return jsonify({"error": "No file part"}), 400
+    file = request.files['file']
+    paper_uuid = request.form.get('uuid')
+    
+    if file.filename == '' or not paper_uuid: return jsonify({"error": "No selected file"}), 400
+    
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        save_name = f"{paper_uuid}_attachment_{filename}"
+        file.save(os.path.join(NOTES_DIR, save_name))
+        return jsonify({"success": True})
+    
+    return jsonify({"error": "Invalid file type. Only ppt, docx, txt, pdf, md allowed."}), 400
 
 @app.route('/api/graph')
 def build_graph():
@@ -263,16 +320,16 @@ def build_graph():
     
     for rel_path, data in cached_papers.items():
         if safe_folder and safe_folder != 'global':
-            if not rel_path.startswith(safe_folder + '/'):
-                continue
+            if not rel_path.startswith(safe_folder + '/'): continue
         papers.append({
             "id": html.escape(rel_path),
+            "uuid": html.escape(data.get("uuid", "")),
             "title": html.escape(data["title"]),
             "text": html.escape(data["text"]),
             "status": data.get("status", "none")
         })
 
-    elements = [{"group": "nodes", "data": {"id": p["id"], "label": p["title"], "status": p["status"]}} for p in papers]
+    elements = [{"group": "nodes", "data": {"id": p["id"], "uuid": p["uuid"], "label": p["title"], "status": p["status"]}} for p in papers]
 
     for u in papers:
         u_text_lower = u["text"].lower()
@@ -280,17 +337,14 @@ def build_graph():
         
         for v in papers:
             if u["id"] == v["id"]: continue
-            
             v_title_clean = v["title"].lower().strip()
             if len(v_title_clean) < 10: continue
-            
             search_title = v_title_clean[:40] 
             title_idx = u_text_lower.rfind(search_title)
             
             if title_idx != -1:
                 ref_context = u["text"][max(0, title_idx - 250):title_idx]
                 marker = None
-                
                 brackets = re.findall(r'\[([^\]]+)\]', ref_context)
                 if brackets: marker = f"[{brackets[-1]}]"
                 else:

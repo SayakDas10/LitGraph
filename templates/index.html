@@ -26,14 +26,6 @@
         </div>
     </div>
 
-    <!-- Floating Node Action Menu (Now with Rename) -->
-    <div id="nodeMenu" class="node-menu">
-        <button id="btnOpenPdf"><i class="fas fa-external-link-alt"></i> Open PDF</button>
-        <button id="btnEditTitle"><i class="fas fa-edit"></i> Rename</button>
-        <button id="btnMarkRead"><i class="fas fa-check-circle"></i> Read</button>
-        <button id="btnMarkPrioritize"><i class="fas fa-star"></i> Prioritize</button>
-    </div>
-
     <div id="cy"></div>
     
     <div id="sidebar">
@@ -43,7 +35,7 @@
         </div>
         
         <div class="folder-tree-container">
-            <h3 style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Projects</h3>
+            <h3 class="section-title">Projects</h3>
             <div id="folderTree"></div>
         </div>
         
@@ -68,18 +60,48 @@
         <div id="info">
             <div class="empty-state">
                 <div class="instruction"><i class="fas fa-folder-open"></i> Select a folder to filter the graph.</div>
-                <div class="instruction"><i class="fas fa-mouse-pointer"></i> Click a node to open options (Rename, Read, etc).</div>
-                <div class="instruction"><i class="fas fa-project-diagram"></i> Click curved edges to read the exact citation context.</div>
+                <div class="instruction"><i class="fas fa-mouse-pointer"></i> Click a node to open notes and options.</div>
+                <div class="instruction"><i class="fas fa-project-diagram"></i> Click curved edges to read citation context.</div>
             </div>
         </div>
     </div>
 
     <div id="citation-panel">
         <div class="header-container" style="margin-bottom: 20px;">
-            <h2 style="font-size: 1.3rem;">Citation Context</h2>
+            <h2 id="panelTitle" style="font-size: 1.25rem;">Details</h2>
             <button class="close-btn" onclick="closeCitationPanel()" aria-label="Close Panel"><i class="fas fa-times"></i></button>
         </div>
-        <div id="citation-content"></div>
+        
+        <div id="citation-content">
+            <!-- Edge View -->
+            <div id="edge-view" style="display: none;"></div>
+            
+            <!-- Node View -->
+            <div id="node-view" style="display: none; flex-direction: column; gap: 24px;">
+                <div style="display: flex; gap: 8px;">
+                    <button id="btnOpenPdf" class="action-btn"><i class="fas fa-external-link-alt"></i> Open</button>
+                    <button id="btnEditTitle" class="action-btn"><i class="fas fa-edit"></i> Rename</button>
+                    <button id="btnMarkRead" class="action-btn"><i class="fas fa-check-circle"></i> Read</button>
+                    <button id="btnMarkPrioritize" class="action-btn"><i class="fas fa-star"></i> Prioritize</button>
+                </div>
+                
+                <div>
+                    <div class="section-title">My Notes</div>
+                    <textarea id="nodeTextNote" class="note-textarea" rows="6" placeholder="Type your thoughts here..."></textarea>
+                    <button id="btnSaveNote" class="action-btn" style="flex-direction: row; margin-top: 10px; width: 100%; justify-content: center;"><i class="fas fa-save"></i> Save Text Note</button>
+                </div>
+
+                <div>
+                    <div class="section-title">Add Notes (Attachments)</div>
+                    <div id="dropZone" class="drop-zone">
+                        <i class="fas fa-cloud-upload-alt" style="font-size: 1.5rem; margin-bottom: 8px; display: block;"></i>
+                        Drag & Drop or click to attach<br><small style="opacity:0.7">ppt, docx, txt, pdf, md</small>
+                    </div>
+                    <input type="file" id="fileInput" style="display:none;" accept=".ppt,.pptx,.docx,.txt,.pdf,.md">
+                    <div id="attachmentList" style="margin-top:12px; display:flex; flex-direction:column; gap:8px;"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -87,6 +109,7 @@
         let isDark = true;
         window.cy = null;
         let currentFolder = 'global';
+        let currentNodeData = null; // Stores data for the actively viewed node
         
         const getStyleSheet = (dark) => {
             const nodeColor = dark ? '#1e293b' : '#ffffff'; 
@@ -98,10 +121,8 @@
             
             return [
                 { selector: 'node', style: { 'shape': 'round-rectangle', 'background-color': nodeColor, 'label': 'data(label)', 'color': labelColor, 'font-size': '13px', 'font-family': 'Inter, sans-serif', 'font-weight': '600', 'text-valign': 'center', 'text-halign': 'center', 'text-wrap': 'wrap', 'text-max-width': '160px', 'padding': '14px', 'width': 'label', 'height': 'label', 'corner-radius': '100px', 'border-width': 1, 'border-color': edgeColor, 'shadow-blur': 15, 'shadow-color': shadowColor, 'shadow-opacity': dark ? 0.6 : 0.15, 'shadow-offset-y': 6, 'shadow-offset-x': 0, 'cursor': 'pointer', 'z-index': 10, 'transition-property': 'background-color, shadow-blur, border-color, color, transform', 'transition-duration': '0.3s' } },
-                
                 { selector: 'node[status = "read"]', style: { 'background-color': '#22c55e', 'border-color': '#16a34a', 'color': '#ffffff', 'shadow-color': '#22c55e' } },
                 { selector: 'node[status = "prioritize"]', style: { 'background-color': '#eab308', 'border-color': '#ca8a04', 'color': '#0f172a', 'shadow-color': '#eab308' } },
-                
                 { selector: 'edge', style: { 'width': 2.5, 'line-color': edgeColor, 'target-arrow-color': edgeColor, 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'opacity': 0.4, 'label': 'data(citation_number)', 'font-size': '11px', 'font-family': 'Inter, sans-serif', 'font-weight': '700', 'text-background-opacity': 1, 'text-background-color': dark ? '#1e293b' : '#ffffff', 'color': highlightColor, 'text-border-color': edgeColor, 'text-border-width': 1, 'text-border-opacity': 0.5, 'text-background-shape': 'roundrectangle', 'text-background-padding': '4px', 'cursor': 'pointer', 'text-opacity': 0.6, 'transition-property': 'line-color, target-arrow-color, width, opacity, text-opacity', 'transition-duration': '0.3s' } },
                 { selector: '.highlighted-node', style: { 'background-color': glowColor, 'color': '#0f172a', 'border-color': glowColor, 'shadow-color': glowColor, 'shadow-opacity': 0.5, 'shadow-blur': 25, 'z-index': 999 } },
                 { selector: '.highlighted-edge', style: { 'line-color': glowColor, 'target-arrow-color': glowColor, 'width': 4, 'opacity': 1, 'color': glowColor, 'text-border-color': glowColor, 'text-opacity': 1, 'z-index': 990 } },
@@ -152,104 +173,174 @@
                 url += '?folder=' + encodeURIComponent(folderPath);
             }
             
-            fetch(url)
-                .then(res => res.json())
-                .then(data => {
-                    if (window.cy) window.cy.destroy();
-                    
-                    window.cy = cytoscape({ 
-                        container: document.getElementById('cy'), elements: data, style: getStyleSheet(isDark), 
-                        layout: { name: 'cose', padding: 100, nodeDimensionsIncludeLabels: true, nodeOverlap: 50, randomize: true, idealEdgeLength: 400, nodeRepulsion: 9000000, gravity: 20, numIter: 3000, edgeElasticity: 20 }, 
-                        minZoom: 0.15, maxZoom: 2.5 
-                    });
-
-                    window.cy.on('mouseover', 'node', function(evt){
-                        var node = evt.target; window.cy.elements().addClass('faded'); node.removeClass('faded').addClass('highlighted-node'); node.connectedEdges().removeClass('faded').addClass('highlighted-edge'); node.connectedEdges().connectedNodes().removeClass('faded').addClass('highlighted-node');
-                    });
-                    window.cy.on('mouseout', 'node, edge', () => window.cy.elements().removeClass('faded').removeClass('highlighted-node').removeClass('highlighted-edge'));
-                    window.cy.on('mouseover', 'edge', function(evt){
-                        var edge = evt.target; window.cy.elements().addClass('faded'); edge.removeClass('faded').addClass('highlighted-edge'); edge.connectedNodes().removeClass('faded').addClass('highlighted-node');
-                    });
-
-                    window.cy.on('tap', 'node', function(evt){
-                        var node = evt.target;
-                        showNodeMenu(node, evt.renderedPosition);
-                    });
-
-                    window.cy.on('tap', function(evt){ if (evt.target === window.cy) hideNodeMenu(); });
-                    window.cy.on('pan zoom', function() { hideNodeMenu(); });
-                    
-                    window.cy.on('tap', 'edge', function(evt){
-                        hideNodeMenu();
-                        var edge = evt.target;
-                        var sourceLabel = window.cy.getElementById(edge.data('source')).data('label');
-                        var targetLabel = window.cy.getElementById(edge.data('target')).data('label');
-                        var citeNum = edge.data('citation_number') ? ` <span style="color:var(--highlight); font-weight:bold;">${edge.data('citation_number')}</span>` : '';
-                        
-                        var contextHTML = `<h3 style="font-size:1.15rem; margin-bottom:16px; margin-top:0; color:var(--text-main); font-weight:700;">${sourceLabel} <br><i class="fas fa-arrow-down" style="color:var(--text-muted); font-size:1rem; margin: 10px 0;"></i> <br>${targetLabel}${citeNum}</h3>`;
-                        
-                        var sentences = edge.data('context').split('|||');
-                        sentences.forEach(sentence => { 
-                            if (sentence.trim() !== "") { 
-                                let styledSentence = sentence.replace(/&lt;span class=&#x27;highlight&#x27;&gt;/g, "<span class='highlight-text'>").replace(/&lt;\/span&gt;/g, "</span>");
-                                contextHTML += `<div class="context-box">${styledSentence.trim()}</div>`; 
-                            } 
-                        });
-                        
-                        document.getElementById('citation-content').innerHTML = contextHTML;
-                        document.getElementById('citation-panel').classList.add('active');
-                    });
+            fetch(url).then(res => res.json()).then(data => {
+                if (window.cy) window.cy.destroy();
+                window.cy = cytoscape({ 
+                    container: document.getElementById('cy'), elements: data, style: getStyleSheet(isDark), 
+                    layout: { name: 'cose', padding: 100, nodeDimensionsIncludeLabels: true, nodeOverlap: 50, randomize: true, idealEdgeLength: 400, nodeRepulsion: 9000000, gravity: 20, numIter: 3000, edgeElasticity: 20 }, 
+                    minZoom: 0.15, maxZoom: 2.5 
                 });
+
+                window.cy.on('mouseover', 'node', function(evt){
+                    var node = evt.target; window.cy.elements().addClass('faded'); node.removeClass('faded').addClass('highlighted-node'); node.connectedEdges().removeClass('faded').addClass('highlighted-edge'); node.connectedEdges().connectedNodes().removeClass('faded').addClass('highlighted-node');
+                });
+                window.cy.on('mouseout', 'node, edge', () => window.cy.elements().removeClass('faded').removeClass('highlighted-node').removeClass('highlighted-edge'));
+                window.cy.on('mouseover', 'edge', function(evt){
+                    var edge = evt.target; window.cy.elements().addClass('faded'); edge.removeClass('faded').addClass('highlighted-edge'); edge.connectedNodes().removeClass('faded').addClass('highlighted-node');
+                });
+
+                // Tapping Node -> Show Node Panel
+                window.cy.on('tap', 'node', function(evt){
+                    showNodePanel(evt.target);
+                });
+
+                // Tapping Edge -> Show Citation Panel
+                window.cy.on('tap', 'edge', function(evt){
+                    showEdgePanel(evt.target);
+                });
+            });
         }
-        
-        function showNodeMenu(node, pos) {
-            const menu = document.getElementById('nodeMenu');
-            menu.style.display = 'flex';
-            menu.style.left = (pos.x + 15) + 'px';
-            menu.style.top = (pos.y + 15) + 'px';
 
-            const nodeId = node.id();
-            const currentStatus = node.data('status');
-            const currentTitle = node.data('label');
-
-            document.getElementById('btnOpenPdf').onclick = () => {
-                window.open('/papers/' + encodeURIComponent(nodeId), '_blank');
-                hideNodeMenu();
-            };
-
-            // Manual Edit Title Logic
+        // --- View Switching Logic ---
+        function showNodePanel(node) {
+            currentNodeData = node;
+            const uuid = node.data('uuid');
+            
+            document.getElementById('edge-view').style.display = 'none';
+            document.getElementById('node-view').style.display = 'flex';
+            document.getElementById('panelTitle').innerText = node.data('label');
+            
+            // Buttons logic
+            document.getElementById('btnOpenPdf').onclick = () => window.open('/papers/' + encodeURIComponent(node.id()), '_blank');
+            
             document.getElementById('btnEditTitle').onclick = () => {
-                hideNodeMenu();
-                const newTitle = prompt("Enter a new title for this paper:", currentTitle);
-                
-                if (newTitle && newTitle.trim() !== "" && newTitle !== currentTitle) {
-                    node.data('label', newTitle.trim()); // Update UI instantly
-                    
-                    fetch('/api/update_title', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: nodeId, title: newTitle.trim() })
-                    });
+                const newTitle = prompt("Enter a new title for this paper:", node.data('label'));
+                if (newTitle && newTitle.trim() !== "" && newTitle !== node.data('label')) {
+                    node.data('label', newTitle.trim()); 
+                    document.getElementById('panelTitle').innerText = newTitle.trim();
+                    fetch('/api/update_title', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: node.id(), title: newTitle.trim() }) });
                 }
             };
 
             const btnRead = document.getElementById('btnMarkRead');
-            btnRead.className = currentStatus === 'read' ? 'active-read' : '';
+            btnRead.className = 'action-btn ' + (node.data('status') === 'read' ? 'active-read' : '');
             btnRead.onclick = () => toggleNodeStatus(node, 'read');
 
             const btnPrioritize = document.getElementById('btnMarkPrioritize');
-            btnPrioritize.className = currentStatus === 'prioritize' ? 'active-prioritize' : '';
+            btnPrioritize.className = 'action-btn ' + (node.data('status') === 'prioritize' ? 'active-prioritize' : '');
             btnPrioritize.onclick = () => toggleNodeStatus(node, 'prioritize');
+
+            // Lazy Load Notes & Attachments
+            document.getElementById('nodeTextNote').value = "";
+            document.getElementById('attachmentList').innerHTML = "";
+            
+            fetch('/api/node_details/' + uuid)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('nodeTextNote').value = data.text;
+                    renderAttachments(data.attachments);
+                });
+                
+            document.getElementById('citation-panel').classList.add('active');
         }
 
-        function hideNodeMenu() {
-            document.getElementById('nodeMenu').style.display = 'none';
+        function showEdgePanel(edge) {
+            currentNodeData = null; // Clear context
+            document.getElementById('node-view').style.display = 'none';
+            document.getElementById('edge-view').style.display = 'block';
+            document.getElementById('panelTitle').innerText = "Citation Context";
+
+            var sourceLabel = window.cy.getElementById(edge.data('source')).data('label');
+            var targetLabel = window.cy.getElementById(edge.data('target')).data('label');
+            var citeNum = edge.data('citation_number') ? ` <span style="color:var(--highlight); font-weight:bold;">${edge.data('citation_number')}</span>` : '';
+            
+            var contextHTML = `<h3 style="font-size:1.15rem; margin-bottom:16px; margin-top:0; color:var(--text-main); font-weight:700;">${sourceLabel} <br><i class="fas fa-arrow-down" style="color:var(--text-muted); font-size:1rem; margin: 10px 0;"></i> <br>${targetLabel}${citeNum}</h3>`;
+            
+            var sentences = edge.data('context').split('|||');
+            sentences.forEach(sentence => { 
+                if (sentence.trim() !== "") { 
+                    let styledSentence = sentence.replace(/&lt;span class=&#x27;highlight&#x27;&gt;/g, "<span class='highlight-text'>").replace(/&lt;\/span&gt;/g, "</span>");
+                    contextHTML += `<div class="context-box">${styledSentence.trim()}</div>`; 
+                } 
+            });
+            document.getElementById('edge-view').innerHTML = contextHTML;
+            document.getElementById('citation-panel').classList.add('active');
+        }
+
+        // --- Note Saving Logic ---
+        document.getElementById('btnSaveNote').onclick = () => {
+            if (!currentNodeData) return;
+            const text = document.getElementById('nodeTextNote').value;
+            const btn = document.getElementById('btnSaveNote');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            
+            fetch('/api/save_note', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uuid: currentNodeData.data('uuid'), text: text })
+            }).then(() => {
+                btn.innerHTML = '<i class="fas fa-check"></i> Saved!';
+                setTimeout(() => btn.innerHTML = originalHTML, 2000);
+            });
+        };
+
+        // --- Drag & Drop Upload Logic ---
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files.length) uploadAttachment(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) uploadAttachment(fileInput.files[0]);
+        });
+
+        function uploadAttachment(file) {
+            if (!currentNodeData) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('uuid', currentNodeData.data('uuid'));
+
+            dropZone.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+            
+            fetch('/api/upload_attachment', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    dropZone.innerHTML = '<i class="fas fa-cloud-upload-alt" style="font-size: 1.5rem; margin-bottom: 8px; display: block;"></i> Drag & Drop or click to attach<br><small style="opacity:0.7">ppt, docx, txt, pdf, md</small>';
+                    if (data.success) {
+                        // Reload attachments quietly
+                        fetch('/api/node_details/' + currentNodeData.data('uuid'))
+                            .then(res => res.json())
+                            .then(d => renderAttachments(d.attachments));
+                    } else { alert(data.error); }
+                });
+        }
+
+        function renderAttachments(attachments) {
+            const list = document.getElementById('attachmentList');
+            list.innerHTML = '';
+            attachments.forEach(att => {
+                list.innerHTML += `
+                    <div class="attachment-item">
+                        <i class="fas fa-paperclip"></i>
+                        <a href="/notes/${att.filename}" target="_blank" title="${att.original_name}">${att.original_name}</a>
+                    </div>`;
+            });
         }
 
         function toggleNodeStatus(node, targetType) {
             let newStatus = (node.data('status') === targetType) ? 'none' : targetType;
             node.data('status', newStatus);
-            hideNodeMenu();
+            
+            document.getElementById('btnMarkRead').className = 'action-btn ' + (newStatus === 'read' ? 'active-read' : '');
+            document.getElementById('btnMarkPrioritize').className = 'action-btn ' + (newStatus === 'prioritize' ? 'active-prioritize' : '');
+
             fetch('/api/update_status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -259,6 +350,7 @@
 
         window.closeCitationPanel = function() { document.getElementById('citation-panel').classList.remove('active'); };
 
+        // --- Base Controls Logic ---
         const searchInput = document.getElementById('searchInput');
         const suggestionBox = document.getElementById('suggestionBox');
 
@@ -290,7 +382,6 @@
             const query = searchInput.value.toLowerCase().trim();
             if (!query) return;
             const nodes = window.cy.nodes().filter(n => n.data('label').toLowerCase().includes(query) || n.data('id').toLowerCase().includes(query));
-            
             if (nodes.length > 0) {
                 const targetNode = nodes[0];
                 window.cy.animate({ center: { eles: targetNode }, zoom: 1.2, duration: 800, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' });

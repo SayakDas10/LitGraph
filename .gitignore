@@ -13,3 +13,5 @@ papers/*
 
 # Ignore macOS system files (if applicable)
 .DS_Store
+
+notes/*
