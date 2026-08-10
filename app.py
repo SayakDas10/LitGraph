@@ -128,7 +128,6 @@ def import_library():
     if not source_path or not os.path.exists(source_path) or not os.path.isdir(source_path):
         return jsonify({"error": "Invalid folder path. Please provide a valid absolute directory path."}), 400
 
-    # Prevent importing the target folder into itself
     if os.path.abspath(source_path) == os.path.abspath(PAPERS_DIR):
         return jsonify({"error": "Cannot import the destination folder into itself."}), 400
 
@@ -137,7 +136,6 @@ def import_library():
         for root, dirs, files in os.walk(source_path):
             for file in files:
                 if file.lower().endswith('.pdf'):
-                    # Recreate internal folder structure
                     rel_dir = os.path.relpath(root, source_path)
                     if rel_dir == '.':
                         target_dir = PAPERS_DIR
@@ -148,7 +146,6 @@ def import_library():
                     src_file = os.path.join(root, file)
                     dst_file = os.path.join(target_dir, file)
 
-                    # Skip if the file already exists in the destination to prevent overwrites
                     if not os.path.exists(dst_file):
                         if action == 'move':
                             shutil.move(src_file, dst_file)
@@ -158,6 +155,54 @@ def import_library():
         return jsonify({"success": True, "count": imported_count})
     except Exception as e:
         return jsonify({"error": f"Failed during {action}: {str(e)}"}), 500
+
+
+@app.route('/api/delete_paper', methods=['POST'])
+def delete_paper():
+    data = request.json
+    paper_id = html.unescape(data.get('id', ''))
+
+    cache = load_cache()
+    if paper_id in cache.get("papers", {}):
+        paper_data = cache["papers"][paper_id]
+        paper_uuid = paper_data.get("uuid")
+
+        # 1. Delete the PDF file
+        pdf_path = os.path.join(PAPERS_DIR, paper_id)
+        if os.path.exists(pdf_path):
+            try:
+                os.remove(pdf_path)
+            except Exception as e:
+                print(f"Error removing PDF: {e}")
+
+        # 2. Delete the Text Note and all Attachments
+        if paper_uuid:
+            txt_path = os.path.join(NOTES_DIR, f"{paper_uuid}.txt")
+            if os.path.exists(txt_path):
+                try:
+                    os.remove(txt_path)
+                except:
+                    pass
+
+            prefix = f"{paper_uuid}_attachment_"
+            for f in os.listdir(NOTES_DIR):
+                if f.startswith(prefix):
+                    try:
+                        os.remove(os.path.join(NOTES_DIR, f))
+                    except:
+                        pass
+
+        # 3. Clean up the JSON cache
+        del cache["papers"][paper_id]
+        if "edges" in cache:
+            # Remove any edge that is connected to this deleted paper
+            cache["edges"] = [e for e in cache["edges"] if e["source"]
+                              != paper_id and e["target"] != paper_id]
+
+        save_cache(cache)
+        return jsonify({"success": True})
+
+    return jsonify({"error": "Paper not found in cache"}), 404
 
 
 @app.route('/api/check_updates')

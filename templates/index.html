@@ -193,13 +193,15 @@
             <!-- Edge View -->
             <div id="edge-view" style="display: none;"></div>
 
-            <!-- Node View -->
+            <!-- Node View (Added flex-wrap and Delete Button) -->
             <div id="node-view" style="display: none; flex-direction: column; gap: 24px;">
-                <div style="display: flex; gap: 8px;">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                     <button id="btnOpenPdf" class="action-btn"><i class="fas fa-external-link-alt"></i> Open</button>
                     <button id="btnEditTitle" class="action-btn"><i class="fas fa-edit"></i> Rename</button>
                     <button id="btnMarkRead" class="action-btn"><i class="fas fa-check-circle"></i> Read</button>
                     <button id="btnMarkPrioritize" class="action-btn"><i class="fas fa-star"></i> Prioritize</button>
+                    <button id="btnDeletePaper" class="action-btn delete-btn"><i class="fas fa-trash-alt"></i>
+                        Delete</button>
                 </div>
 
                 <div>

@@ -237,6 +237,25 @@ function showNodePanel(node) {
     btnPrioritize.className = 'action-btn ' + (node.data('status') === 'prioritize' ? 'active-prioritize' : '');
     btnPrioritize.onclick = () => toggleNodeStatus(node, 'prioritize');
 
+    // Delete Logic
+    document.getElementById('btnDeletePaper').onclick = () => {
+        if (confirm("Are you sure you want to completely delete this paper, along with all its notes and attachments? This cannot be undone.")) {
+            fetch('/api/delete_paper', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: node.id() })
+            }).then(res => res.json()).then(data => {
+                if (data.success) {
+                    closeCitationPanel();
+                    loadFolders();
+                    checkAndLoadGraph(currentFolder === 'global' ? '' : currentFolder);
+                } else {
+                    alert(data.error || "Failed to delete paper.");
+                }
+            });
+        }
+    };
+
     document.getElementById('nodeTextNote').value = "Loading notes...";
     document.getElementById('attachmentList').innerHTML = "";
 
