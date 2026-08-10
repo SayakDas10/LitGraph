@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>LitGraph</title>
@@ -8,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body data-theme="default-dark">
 
     <div id="syncOverlay">
@@ -38,10 +40,11 @@
                 <h3 style="margin:0; font-weight:700;">Add Single Paper</h3>
                 <button class="close-modal" onclick="closeLocalModal()"><i class="fas fa-times"></i></button>
             </div>
-            
+
             <div class="form-group">
                 <label>Absolute File Path to PDF</label>
-                <input type="text" id="localFilePath" class="form-control" placeholder="e.g. /Users/name/Downloads/paper.pdf">
+                <input type="text" id="localFilePath" class="form-control"
+                    placeholder="e.g. /Users/name/Downloads/paper.pdf">
             </div>
 
             <div class="form-group">
@@ -77,15 +80,18 @@
                 <h3 style="margin:0; font-weight:700;">Import Entire Library</h3>
                 <button class="close-modal" onclick="closeImportModal()"><i class="fas fa-times"></i></button>
             </div>
-            
+
             <div class="form-group">
                 <label>Absolute Path to Library Folder</label>
-                <input type="text" id="importFolderPath" class="form-control" placeholder="e.g. /Users/name/Documents/Research">
+                <input type="text" id="importFolderPath" class="form-control"
+                    placeholder="e.g. /Users/name/Documents/Research">
             </div>
 
             <div class="form-group">
-                <div style="background: rgba(234, 179, 8, 0.1); border: 1px solid #eab308; padding: 12px; border-radius: 8px; color: #ca8a04; font-size: 0.9rem; margin-bottom: 16px;">
-                    <i class="fas fa-exclamation-triangle"></i> <b>Caution:</b> Only <b>.pdf</b> files will be imported. The internal folder structure will be preserved.
+                <div
+                    style="background: rgba(234, 179, 8, 0.1); border: 1px solid #eab308; padding: 12px; border-radius: 8px; color: #ca8a04; font-size: 0.9rem; margin-bottom: 16px;">
+                    <i class="fas fa-exclamation-triangle"></i> <b>Caution:</b> Only <b>.pdf</b> files will be imported.
+                    The internal folder structure will be preserved.
                 </div>
             </div>
 
@@ -106,11 +112,11 @@
     </div>
 
     <div id="cy"></div>
-    
+
     <div id="sidebar">
         <div class="header-container">
             <h2>LitGraph</h2>
-            
+
             <div style="display: flex; gap: 8px; align-items: center;">
                 <select id="themeSelect" class="theme-select">
                     <option value="default-dark">Default Dark</option>
@@ -125,17 +131,18 @@
                     <option value="olivia">Olivia</option>
                 </select>
                 <!-- Hide Sidebar Button -->
-                <button class="close-btn" onclick="toggleSidebar()" aria-label="Hide Sidebar" title="Hide Sidebar" style="width: 34px; height: 34px; font-size: 0.9rem;">
+                <button class="close-btn" onclick="toggleSidebar()" aria-label="Hide Sidebar" title="Hide Sidebar"
+                    style="width: 34px; height: 34px; font-size: 0.9rem;">
                     <i class="fas fa-chevron-left"></i>
                 </button>
             </div>
         </div>
-        
+
         <div class="folder-tree-container">
             <h3 class="section-title">Projects</h3>
             <div id="folderTree"></div>
         </div>
-        
+
         <div class="controls">
             <div class="input-group">
                 <div class="autocomplete-container">
@@ -144,12 +151,16 @@
                 </div>
                 <button onclick="searchNode()" title="Search"><i class="fas fa-search"></i></button>
             </div>
-            
+
             <div style="display: flex; gap: 10px;">
-                <button class="action-btn" style="flex: 1; padding: 14px; display: flex; flex-direction: row; justify-content: center; align-items: center; gap: 8px;" onclick="openLocalModal()">
+                <button class="action-btn"
+                    style="flex: 1; padding: 14px; display: flex; flex-direction: row; justify-content: center; align-items: center; gap: 8px;"
+                    onclick="openLocalModal()">
                     <i class="fas fa-file-import"></i> Single
                 </button>
-                <button class="action-btn" style="flex: 1; padding: 14px; display: flex; flex-direction: row; justify-content: center; align-items: center; gap: 8px;" onclick="openImportModal()">
+                <button class="action-btn"
+                    style="flex: 1; padding: 14px; display: flex; flex-direction: row; justify-content: center; align-items: center; gap: 8px;"
+                    onclick="openImportModal()">
                     <i class="fas fa-folder-plus"></i> Import Library
                 </button>
             </div>
@@ -158,10 +169,12 @@
         <div id="info">
             <div class="empty-state">
                 <div class="instruction"><i class="fas fa-folder-open"></i> Select a folder to filter the graph.</div>
-                <div class="instruction"><i class="fas fa-mouse-pointer"></i> Click a node to open notes and options.</div>
-                <div class="instruction"><i class="fas fa-project-diagram"></i> Click curved edges to read citation context.</div>
+                <div class="instruction"><i class="fas fa-mouse-pointer"></i> Click a node to open notes and options.
+                </div>
+                <div class="instruction"><i class="fas fa-project-diagram"></i> Click curved edges to read citation
+                    context.</div>
             </div>
-            
+
             <div class="theme-attribution">
                 <i class="fas fa-palette"></i> Themes inspired by <br>
                 <a href="https://github.com/monkeytypegame/monkeytype" target="_blank">Monkeytype</a>
@@ -172,13 +185,14 @@
     <div id="citation-panel">
         <div class="header-container" style="margin-bottom: 20px;">
             <h2 id="panelTitle" style="font-size: 1.25rem;">Details</h2>
-            <button class="close-btn" onclick="closeCitationPanel()" aria-label="Close Panel"><i class="fas fa-times"></i></button>
+            <button class="close-btn" onclick="closeCitationPanel()" aria-label="Close Panel"><i
+                    class="fas fa-times"></i></button>
         </div>
-        
+
         <div id="citation-content">
             <!-- Edge View -->
             <div id="edge-view" style="display: none;"></div>
-            
+
             <!-- Node View -->
             <div id="node-view" style="display: none; flex-direction: column; gap: 24px;">
                 <div style="display: flex; gap: 8px;">
@@ -187,21 +201,26 @@
                     <button id="btnMarkRead" class="action-btn"><i class="fas fa-check-circle"></i> Read</button>
                     <button id="btnMarkPrioritize" class="action-btn"><i class="fas fa-star"></i> Prioritize</button>
                 </div>
-                
+
                 <div>
                     <div class="section-title">My Notes</div>
-                    <textarea id="nodeTextNote" class="note-textarea" rows="6" placeholder="Type your thoughts here..."></textarea>
-                    <button id="btnSaveNote" class="action-btn" style="flex-direction: row; margin-top: 10px; width: 100%; justify-content: center;"><i class="fas fa-save"></i> Save Text Note</button>
+                    <textarea id="nodeTextNote" class="note-textarea" rows="6"
+                        placeholder="Type your thoughts here..."></textarea>
+                    <button id="btnSaveNote" class="action-btn"
+                        style="flex-direction: row; margin-top: 10px; width: 100%; justify-content: center;"><i
+                            class="fas fa-save"></i> Save Text Note</button>
                 </div>
 
                 <div>
                     <div class="section-title">Add Notes (Attachments)</div>
                     <div id="dropZone" class="drop-zone">
-                        <i class="fas fa-cloud-upload-alt" style="font-size: 1.5rem; margin-bottom: 8px; display: block;"></i>
+                        <i class="fas fa-cloud-upload-alt"
+                            style="font-size: 1.5rem; margin-bottom: 8px; display: block;"></i>
                         Drag & Drop or click to attach<br><small style="opacity:0.7">ppt, docx, txt, pdf, md</small>
                     </div>
                     <input type="file" id="fileInput" style="display:none;" accept=".ppt,.pptx,.docx,.txt,.pdf,.md">
-                    <div id="attachmentList" style="margin-top:12px; display:flex; flex-direction:column; gap:8px;"></div>
+                    <div id="attachmentList" style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
+                    </div>
                 </div>
             </div>
         </div>
@@ -210,4 +229,5 @@
     <!-- External Script Linked Here -->
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
+
 </html>

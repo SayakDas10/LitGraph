@@ -2,16 +2,9 @@
 venv/
 env/
 .litgraph.json
-# Ignore Python cache files
 __pycache__/
 *.pyc
-
-# Ignore all files inside the papers folder...
 papers/*
-# ...except for the .gitkeep file, so the folder itself is pushed
 !papers/.gitkeep
-
-# Ignore macOS system files (if applicable)
 .DS_Store
-
 notes/*

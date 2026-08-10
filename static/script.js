@@ -1,9 +1,9 @@
 // --- Sidebar Visibility Logic ---
-window.toggleSidebar = function() {
+window.toggleSidebar = function () {
     const sidebar = document.getElementById('sidebar');
     const openBtn = document.getElementById('openSidebarBtn');
     const floatingSearch = document.getElementById('floatingSearchContainer');
-    
+
     sidebar.classList.toggle('hidden');
     openBtn.classList.toggle('visible');
     floatingSearch.classList.toggle('visible');
@@ -22,7 +22,7 @@ themeSelect.addEventListener('change', (e) => {
     const newTheme = e.target.value;
     document.body.setAttribute('data-theme', newTheme);
     localStorage.setItem('litgraph-theme', newTheme);
-    
+
     if (window.cy) {
         setTimeout(() => window.cy.style().fromJson(getDynamicStyleSheet()).update(), 50);
     }
@@ -35,7 +35,7 @@ const getDynamicStyleSheet = () => {
     const highlightColor = getCSSVar('--highlight') || '#6366f1';
     const shadowColor = getCSSVar('--shadow-color') || 'rgba(0,0,0,0.3)';
     const bgMain = getCSSVar('--bg-main') || '#000000';
-    
+
     return [
         { selector: 'node', style: { 'shape': 'round-rectangle', 'background-color': nodeColor, 'label': 'data(label)', 'color': labelColor, 'font-size': '13px', 'font-family': 'Inter, sans-serif', 'font-weight': '600', 'text-valign': 'center', 'text-halign': 'center', 'text-wrap': 'wrap', 'text-max-width': '160px', 'padding': '14px', 'width': 'label', 'height': 'label', 'corner-radius': '100px', 'border-width': 2, 'border-color': edgeColor, 'shadow-blur': 15, 'shadow-color': shadowColor, 'shadow-opacity': 0.6, 'shadow-offset-y': 6, 'shadow-offset-x': 0, 'cursor': 'pointer', 'z-index': 10, 'transition-property': 'background-color, shadow-blur, border-color, color, transform', 'transition-duration': '0.3s' } },
         { selector: 'node[status = "read"]', style: { 'background-color': '#22c55e', 'border-color': '#16a34a', 'color': '#ffffff', 'shadow-color': '#22c55e' } },
@@ -50,7 +50,7 @@ const getDynamicStyleSheet = () => {
 // --- Core App Variables ---
 window.cy = null;
 let currentFolder = 'global';
-let currentNodeData = null; 
+let currentNodeData = null;
 
 // --- Folders & Modals Logic ---
 function loadFolders() {
@@ -65,7 +65,7 @@ function loadFolders() {
                 div.innerHTML = `<i class="fas ${f.id === 'global' ? 'fa-globe' : 'fa-folder'}"></i> ${f.name}`;
                 div.onclick = () => {
                     currentFolder = f.id;
-                    loadFolders(); 
+                    loadFolders();
                     checkAndLoadGraph(f.path);
                 };
                 tree.appendChild(div);
@@ -87,20 +87,20 @@ function openLocalModal() {
         document.getElementById('localFileModal').style.display = 'flex';
     });
 }
-window.closeLocalModal = function() { document.getElementById('localFileModal').style.display = 'none'; };
+window.closeLocalModal = function () { document.getElementById('localFileModal').style.display = 'none'; };
 
-window.submitLocalPaper = function() {
+window.submitLocalPaper = function () {
     const path = document.getElementById('localFilePath').value;
     const folder = document.getElementById('localFolderSelect').value;
     const newFolder = document.getElementById('localNewFolder').value;
     const action = document.querySelector('input[name="fileAction"]:checked').value;
-    
+
     if (!path) { alert('Please provide the absolute path to the PDF.'); return; }
-    
+
     const btn = document.getElementById('submitLocalBtn');
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
     btn.disabled = true;
-    
+
     fetch('/api/add_local_paper', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,14 +108,14 @@ window.submitLocalPaper = function() {
     }).then(res => res.json()).then(data => {
         btn.innerHTML = 'Add Paper';
         btn.disabled = false;
-        
+
         if (data.error) {
             alert(data.error);
         } else {
             closeLocalModal();
             document.getElementById('localFilePath').value = '';
             document.getElementById('localNewFolder').value = '';
-            
+
             loadFolders();
             checkAndLoadGraph(newFolder ? newFolder : (folder === 'global' ? '' : folder));
         }
@@ -126,19 +126,19 @@ window.submitLocalPaper = function() {
     });
 };
 
-window.openImportModal = function() { document.getElementById('importLibraryModal').style.display = 'flex'; };
-window.closeImportModal = function() { document.getElementById('importLibraryModal').style.display = 'none'; };
+window.openImportModal = function () { document.getElementById('importLibraryModal').style.display = 'flex'; };
+window.closeImportModal = function () { document.getElementById('importLibraryModal').style.display = 'none'; };
 
-window.submitImportLibrary = function() {
+window.submitImportLibrary = function () {
     const path = document.getElementById('importFolderPath').value;
     const action = document.querySelector('input[name="importAction"]:checked').value;
-    
+
     if (!path) { alert('Please provide the absolute path to the folder.'); return; }
-    
+
     const btn = document.getElementById('submitImportBtn');
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
     btn.disabled = true;
-    
+
     fetch('/api/import_library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -146,14 +146,14 @@ window.submitImportLibrary = function() {
     }).then(res => res.json()).then(data => {
         btn.innerHTML = 'Import Library';
         btn.disabled = false;
-        
+
         if (data.error) {
             alert(data.error);
         } else {
             alert(`Successfully imported ${data.count} PDFs.`);
             closeImportModal();
             document.getElementById('importFolderPath').value = '';
-            
+
             loadFolders();
             checkAndLoadGraph('global');
         }
@@ -186,26 +186,26 @@ function renderGraph(folderPath = '') {
     if (folderPath && folderPath !== 'global') {
         url += '?folder=' + encodeURIComponent(folderPath);
     }
-    
+
     fetch(url).then(res => res.json()).then(data => {
         if (window.cy) window.cy.destroy();
-        
-        window.cy = cytoscape({ 
-            container: document.getElementById('cy'), elements: data, style: getDynamicStyleSheet(), 
-            layout: { name: 'cose', padding: 100, nodeDimensionsIncludeLabels: true, nodeOverlap: 50, randomize: true, idealEdgeLength: 400, nodeRepulsion: 9000000, gravity: 20, numIter: 3000, edgeElasticity: 20 }, 
-            minZoom: 0.15, maxZoom: 2.5 
+
+        window.cy = cytoscape({
+            container: document.getElementById('cy'), elements: data, style: getDynamicStyleSheet(),
+            layout: { name: 'cose', padding: 100, nodeDimensionsIncludeLabels: true, nodeOverlap: 50, randomize: true, idealEdgeLength: 400, nodeRepulsion: 9000000, gravity: 20, numIter: 3000, edgeElasticity: 20 },
+            minZoom: 0.15, maxZoom: 2.5
         });
 
-        window.cy.on('mouseover', 'node', function(evt){
+        window.cy.on('mouseover', 'node', function (evt) {
             var node = evt.target; window.cy.elements().addClass('faded'); node.removeClass('faded').addClass('highlighted-node'); node.connectedEdges().removeClass('faded').addClass('highlighted-edge'); node.connectedEdges().connectedNodes().removeClass('faded').addClass('highlighted-node');
         });
         window.cy.on('mouseout', 'node, edge', () => window.cy.elements().removeClass('faded').removeClass('highlighted-node').removeClass('highlighted-edge'));
-        window.cy.on('mouseover', 'edge', function(evt){
+        window.cy.on('mouseover', 'edge', function (evt) {
             var edge = evt.target; window.cy.elements().addClass('faded'); edge.removeClass('faded').addClass('highlighted-edge'); edge.connectedNodes().removeClass('faded').addClass('highlighted-node');
         });
 
-        window.cy.on('tap', 'node', function(evt){ showNodePanel(evt.target); });
-        window.cy.on('tap', 'edge', function(evt){ showEdgePanel(evt.target); });
+        window.cy.on('tap', 'node', function (evt) { showNodePanel(evt.target); });
+        window.cy.on('tap', 'edge', function (evt) { showEdgePanel(evt.target); });
     });
 }
 
@@ -213,17 +213,17 @@ function renderGraph(folderPath = '') {
 function showNodePanel(node) {
     currentNodeData = node;
     const uuid = node.data('uuid');
-    
+
     document.getElementById('edge-view').style.display = 'none';
     document.getElementById('node-view').style.display = 'flex';
     document.getElementById('panelTitle').innerText = node.data('label');
-    
+
     document.getElementById('btnOpenPdf').onclick = () => window.open('/papers/' + encodeURIComponent(node.id()), '_blank');
-    
+
     document.getElementById('btnEditTitle').onclick = () => {
         const newTitle = prompt("Enter a new title for this paper:", node.data('label'));
         if (newTitle && newTitle.trim() !== "" && newTitle !== node.data('label')) {
-            node.data('label', newTitle.trim()); 
+            node.data('label', newTitle.trim());
             document.getElementById('panelTitle').innerText = newTitle.trim();
             fetch('/api/update_title', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: node.id(), title: newTitle.trim() }) });
         }
@@ -239,19 +239,19 @@ function showNodePanel(node) {
 
     document.getElementById('nodeTextNote').value = "Loading notes...";
     document.getElementById('attachmentList').innerHTML = "";
-    
+
     fetch('/api/node_details/' + uuid)
         .then(res => res.json())
         .then(data => {
             document.getElementById('nodeTextNote').value = data.text;
             renderAttachments(data.attachments);
         });
-        
+
     document.getElementById('citation-panel').classList.add('active');
 }
 
 function showEdgePanel(edge) {
-    currentNodeData = null; 
+    currentNodeData = null;
     document.getElementById('node-view').style.display = 'none';
     document.getElementById('edge-view').style.display = 'block';
     document.getElementById('panelTitle').innerText = "Citation Context";
@@ -259,15 +259,15 @@ function showEdgePanel(edge) {
     var sourceLabel = window.cy.getElementById(edge.data('source')).data('label');
     var targetLabel = window.cy.getElementById(edge.data('target')).data('label');
     var citeNum = edge.data('citation_number') ? ` <span style="color:var(--highlight); font-weight:bold;">${edge.data('citation_number')}</span>` : '';
-    
+
     var contextHTML = `<h3 style="font-size:1.15rem; margin-bottom:16px; margin-top:0; color:var(--text-main); font-weight:700;">${sourceLabel} <br><i class="fas fa-arrow-down" style="color:var(--text-muted); font-size:1rem; margin: 10px 0;"></i> <br>${targetLabel}${citeNum}</h3>`;
-    
+
     var sentences = edge.data('context').split('|||');
-    sentences.forEach(sentence => { 
-        if (sentence.trim() !== "") { 
+    sentences.forEach(sentence => {
+        if (sentence.trim() !== "") {
             let styledSentence = sentence.replace(/&lt;span class=&#x27;highlight&#x27;&gt;/g, "<span class='highlight-text'>").replace(/&lt;\/span&gt;/g, "</span>");
-            contextHTML += `<div class="context-box">${styledSentence.trim()}</div>`; 
-        } 
+            contextHTML += `<div class="context-box">${styledSentence.trim()}</div>`;
+        }
     });
     document.getElementById('edge-view').innerHTML = contextHTML;
     document.getElementById('citation-panel').classList.add('active');
@@ -280,7 +280,7 @@ document.getElementById('btnSaveNote').onclick = () => {
     const btn = document.getElementById('btnSaveNote');
     const originalHTML = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-    
+
     fetch('/api/save_note', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -314,7 +314,7 @@ function uploadAttachment(file) {
     formData.append('uuid', currentNodeData.data('uuid'));
 
     dropZone.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-    
+
     fetch('/api/upload_attachment', { method: 'POST', body: formData })
         .then(res => res.json())
         .then(data => {
@@ -342,7 +342,7 @@ function renderAttachments(attachments) {
 function toggleNodeStatus(node, targetType) {
     let newStatus = (node.data('status') === targetType) ? 'none' : targetType;
     node.data('status', newStatus);
-    
+
     document.getElementById('btnMarkRead').className = 'action-btn ' + (newStatus === 'read' ? 'active-read' : '');
     document.getElementById('btnMarkPrioritize').className = 'action-btn ' + (newStatus === 'prioritize' ? 'active-prioritize' : '');
 
@@ -353,7 +353,7 @@ function toggleNodeStatus(node, targetType) {
     });
 }
 
-window.closeCitationPanel = function() { document.getElementById('citation-panel').classList.remove('active'); };
+window.closeCitationPanel = function () { document.getElementById('citation-panel').classList.remove('active'); };
 
 // --- Unified Search Engine ---
 function executeSearch(query) {
@@ -364,14 +364,14 @@ function executeSearch(query) {
     if (nodes.length > 0) {
         const targetNode = nodes[0];
         window.cy.animate({ center: { eles: targetNode }, zoom: 1.2, duration: 800, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' });
-        window.cy.elements().addClass('faded'); 
+        window.cy.elements().addClass('faded');
         targetNode.removeClass('faded').addClass('highlighted-node');
         setTimeout(() => window.cy.elements().removeClass('faded').removeClass('highlighted-node'), 3000);
-        
+
         document.getElementById('searchInput').value = '';
         document.getElementById('floatingSearchInput').value = '';
-    } else { 
-        alert("No paper found matching that search in the graph."); 
+    } else {
+        alert("No paper found matching that search in the graph.");
     }
 }
 
@@ -379,13 +379,13 @@ function bindSearchLogic(inputId, suggestionBoxId, triggerFunc) {
     const input = document.getElementById(inputId);
     const suggestionBox = document.getElementById(suggestionBoxId);
 
-    input.addEventListener('input', function() {
+    input.addEventListener('input', function () {
         const val = this.value.toLowerCase().trim();
         suggestionBox.innerHTML = '';
         if (!val || !window.cy) { suggestionBox.style.display = 'none'; return; }
         const nodes = window.cy.nodes().filter(n => n.data('label').toLowerCase().includes(val) || n.data('id').toLowerCase().includes(val));
 
-        if(nodes.length > 0) {
+        if (nodes.length > 0) {
             suggestionBox.style.display = 'block';
             nodes.slice(0, 8).forEach(n => {
                 const div = document.createElement('div');
@@ -394,24 +394,24 @@ function bindSearchLogic(inputId, suggestionBoxId, triggerFunc) {
                 div.addEventListener('click', () => {
                     input.value = n.data('label');
                     suggestionBox.style.display = 'none';
-                    triggerFunc(input.value); 
+                    triggerFunc(input.value);
                 });
                 suggestionBox.appendChild(div);
             });
         } else { suggestionBox.style.display = 'none'; }
     });
 
-    input.addEventListener('keypress', function(e) { 
-        if(e.key === 'Enter') { 
-            e.preventDefault(); 
+    input.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
             suggestionBox.style.display = 'none';
-            triggerFunc(input.value); 
-        } 
+            triggerFunc(input.value);
+        }
     });
 
-    document.addEventListener('click', function(e) { 
+    document.addEventListener('click', function (e) {
         if (e.target !== input && e.target !== suggestionBox) {
-            suggestionBox.style.display = 'none'; 
+            suggestionBox.style.display = 'none';
         }
     });
 }
@@ -419,12 +419,12 @@ function bindSearchLogic(inputId, suggestionBoxId, triggerFunc) {
 bindSearchLogic('searchInput', 'suggestionBox', executeSearch);
 bindSearchLogic('floatingSearchInput', 'floatingSuggestionBox', executeSearch);
 
-window.searchNode = function() {
+window.searchNode = function () {
     document.getElementById('suggestionBox').style.display = 'none';
     executeSearch(document.getElementById('searchInput').value);
 };
 
-window.searchNodeFloating = function() {
+window.searchNodeFloating = function () {
     document.getElementById('floatingSuggestionBox').style.display = 'none';
     executeSearch(document.getElementById('floatingSearchInput').value);
 };
