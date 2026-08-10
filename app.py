@@ -33,8 +33,8 @@ def load_cache():
             with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except:
-            return {"papers": {}}
-    return {"papers": {}}
+            return {"papers": {}, "edges": []}
+    return {"papers": {}, "edges": []}
 
 def save_cache(cache):
     with open(CACHE_FILE, 'w', encoding='utf-8') as f:
@@ -185,22 +185,30 @@ def build_cache():
                 current_files[rel_path] = os.path.getmtime(path)
                 
     new_cache_papers = {}
+    texts = {} # Temporary in-memory holder for text to pre-compute edges
     
     for rel_path, mtime in current_files.items():
+        abs_path = os.path.join(PAPERS_DIR, rel_path)
+        
+        text = ""
+        doc = None
+        try:
+            doc = pymupdf.open(abs_path)
+            text = re.sub(r'\s+', ' ', " ".join([page.get_text() for page in doc]))
+        except Exception as e:
+            print(f"Could not read {rel_path}: {e}")
+            
+        texts[rel_path] = text
+        
         if rel_path in cached_papers and cached_papers[rel_path]['mtime'] == mtime:
             new_cache_papers[rel_path] = cached_papers[rel_path]
         else:
-            abs_path = os.path.join(PAPERS_DIR, rel_path)
             existing_status = cached_papers.get(rel_path, {}).get("status", "none")
-            # Assign a permanent unique ID to this paper if it doesn't have one
             existing_uuid = cached_papers.get(rel_path, {}).get("uuid", uuid.uuid4().hex)
+            title = None
             
             try:
-                doc = pymupdf.open(abs_path)
-                text = re.sub(r'\s+', ' ', " ".join([page.get_text() for page in doc]))
-                title = None
-                
-                try:
+                if doc:
                     first_page_text = re.sub(r'[^a-zA-Z0-9\s]', ' ', doc[0].get_text("text"))[:150].strip()
                     if first_page_text:
                         s2_url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={first_page_text}&limit=1&fields=title"
@@ -208,31 +216,94 @@ def build_cache():
                         if 'data' in s2_res and len(s2_res['data']) > 0:
                             title = s2_res['data'][0]['title']
                     time.sleep(0.5) 
-                except: pass
-                
-                if not title:
-                    title = doc.metadata.get("title", "").strip()
-                    if not title or title.isnumeric() or len(title) < 5 or title.lower().endswith('.pdf'):
+            except: pass
+            
+            if not title:
+                title = doc.metadata.get("title", "").strip() if doc else ""
+                if not title or title.isnumeric() or len(title) < 5 or title.lower().endswith('.pdf'):
+                    if doc:
                         first_page_lines = doc[0].get_text("text").split('\n')
                         for line in first_page_lines:
                             clean_line = line.strip()
                             if len(clean_line) > 10 and not clean_line.isnumeric():
                                 title = clean_line
                                 break
-                    if not title: title = os.path.basename(rel_path).rsplit('.', 1)[0]
+                if not title: title = os.path.basename(rel_path).rsplit('.', 1)[0]
+            
+            new_cache_papers[rel_path] = {
+                "uuid": existing_uuid,
+                "mtime": mtime,
+                "title": title,
+                "status": existing_status
+            }
+            
+    # --- Pre-compute all edges in memory (O(N^2)) ---
+    edges = []
+    for u_rel_path, u_data in new_cache_papers.items():
+        u_text = texts.get(u_rel_path, "")
+        u_text_lower = u_text.lower()
+        u_sentences = re.split(r'(?<=[.!?])\s+', u_text)
+        
+        for v_rel_path, v_data in new_cache_papers.items():
+            if u_rel_path == v_rel_path: continue
+            
+            v_title_clean = v_data["title"].lower().strip()
+            if len(v_title_clean) < 10: continue
+            
+            search_title = v_title_clean[:40] 
+            title_idx = u_text_lower.rfind(search_title)
+            
+            if title_idx != -1:
+                ref_context = u_text[max(0, title_idx - 250):title_idx]
+                marker = None
                 
-                new_cache_papers[rel_path] = {
-                    "uuid": existing_uuid,
-                    "mtime": mtime,
-                    "title": title,
-                    "text": text,
-                    "status": existing_status
-                }
-            except Exception as e:
-                print(f"Could not read {rel_path}: {e}")
+                brackets = re.findall(r'\[([^\]]+)\]', ref_context)
+                if brackets: marker = f"[{brackets[-1]}]"
+                else:
+                    nums = re.findall(r'(?:\s|^)(\d+)\.\s', ref_context)
+                    if nums: marker = f"[{nums[-1]}]"
+                    else:
+                        years = re.findall(r'\b([12]\d{3}[a-z]?)\b', ref_context)
+                        if years: marker = years[-1]
+                
+                in_text_sentences = []
+                bib_start = max(0, title_idx - 80)
+                bib_end = min(len(u_text), title_idx + len(v_data["title"]) + 120)
+                
+                # HTML Escape raw text before formatting the context snippet
+                safe_bib_entry = html.escape("... " + u_text[bib_start:bib_end].strip() + " ...")
+                safe_v_title = html.escape(v_data['title'][:40])
+                
+                try: 
+                    bib_entry_highlighted = re.sub(f"({re.escape(safe_v_title)}[^\.]*)", r"<span class='highlight-text'>\1</span>", safe_bib_entry, flags=re.IGNORECASE)
+                except: 
+                    bib_entry_highlighted = safe_bib_entry
+                
+                in_text_sentences.append(f"<div style='margin-bottom:8px; color:var(--text-muted);'><i class='fas fa-book'></i> <b>Bibliography Match:</b></div>{bib_entry_highlighted}")
+                
+                if marker:
+                    safe_marker = html.escape(marker)
+                    for sent in u_sentences:
+                        if marker.lower() in sent.lower():
+                            if search_title not in sent.lower():
+                                safe_sent = html.escape(sent)
+                                try:
+                                    sent_highlighted = re.sub(f"({re.escape(safe_marker)})", r"<span class='highlight-text'>\1</span>", safe_sent, flags=re.IGNORECASE)
+                                    in_text_sentences.append(f"<div style='margin-bottom:8px; color:var(--text-muted); margin-top:16px;'><i class='fas fa-quote-left'></i> <b>In-Text Citation:</b></div> {sent_highlighted}")
+                                except:
+                                    in_text_sentences.append(f"<div style='margin-bottom:8px; color:var(--text-muted); margin-top:16px;'><i class='fas fa-quote-left'></i> <b>In-Text Citation:</b></div> {safe_sent}")
+
+                edges.append({
+                    "id": f"edge_{u_rel_path}_{v_rel_path}",
+                    "source": u_rel_path,
+                    "target": v_rel_path,
+                    "citation_number": html.escape(marker) if marker else "",
+                    "context": "|||".join(in_text_sentences)
+                })
                 
     cache["papers"] = new_cache_papers
-    save_cache(cache)
+    cache["edges"] = edges
+    save_cache(cache) # We save metadata and edges, the giant 'texts' dictionary is discarded!
     return jsonify({"success": True})
 
 @app.route('/api/update_status', methods=['POST'])
@@ -260,18 +331,14 @@ def update_title():
         return jsonify({"success": True})
     return jsonify({"error": "Paper not found"}), 404
 
-# --- New Lazy Loading Endpoints for Notes ---
-
 @app.route('/api/node_details/<paper_uuid>')
 def node_details(paper_uuid):
-    # Fetch Text Note
     txt_path = os.path.join(NOTES_DIR, f"{paper_uuid}.txt")
     text_content = ""
     if os.path.exists(txt_path):
         with open(txt_path, 'r', encoding='utf-8') as f:
             text_content = f.read()
             
-    # Fetch Attachments
     attachments = []
     prefix = f"{paper_uuid}_attachment_"
     for f in os.listdir(NOTES_DIR):
@@ -316,65 +383,37 @@ def build_graph():
     
     cache = load_cache()
     cached_papers = cache.get("papers", {})
+    cached_edges = cache.get("edges", [])
+    
     papers = []
+    valid_node_ids = set()
     
     for rel_path, data in cached_papers.items():
         if safe_folder and safe_folder != 'global':
             if not rel_path.startswith(safe_folder + '/'): continue
+            
         papers.append({
             "id": html.escape(rel_path),
             "uuid": html.escape(data.get("uuid", "")),
-            "title": html.escape(data["title"]),
-            "text": html.escape(data["text"]),
-            "status": data.get("status", "none")
+            "title": html.escape(data.get("title", "")),
+            "status": html.escape(data.get("status", "none"))
         })
+        valid_node_ids.add(rel_path)
 
     elements = [{"group": "nodes", "data": {"id": p["id"], "uuid": p["uuid"], "label": p["title"], "status": p["status"]}} for p in papers]
 
-    for u in papers:
-        u_text_lower = u["text"].lower()
-        u_sentences = re.split(r'(?<=[.!?])\s+', u["text"])
-        
-        for v in papers:
-            if u["id"] == v["id"]: continue
-            v_title_clean = v["title"].lower().strip()
-            if len(v_title_clean) < 10: continue
-            search_title = v_title_clean[:40] 
-            title_idx = u_text_lower.rfind(search_title)
-            
-            if title_idx != -1:
-                ref_context = u["text"][max(0, title_idx - 250):title_idx]
-                marker = None
-                brackets = re.findall(r'\[([^\]]+)\]', ref_context)
-                if brackets: marker = f"[{brackets[-1]}]"
-                else:
-                    nums = re.findall(r'(?:\s|^)(\d+)\.\s', ref_context)
-                    if nums: marker = f"[{nums[-1]}]"
-                    else:
-                        years = re.findall(r'\b([12]\d{3}[a-z]?)\b', ref_context)
-                        if years: marker = years[-1]
-                
-                in_text_sentences = []
-                bib_start = max(0, title_idx - 80)
-                bib_end = min(len(u["text"]), title_idx + len(v["title"]) + 120)
-                bib_entry = "... " + u["text"][bib_start:bib_end].strip() + " ..."
-                
-                try: bib_entry_highlighted = re.sub(f"({re.escape(v['title'][:40])}[^\.]*)", r"<span class='highlight'>\1</span>", bib_entry, flags=re.IGNORECASE)
-                except: bib_entry_highlighted = bib_entry
-                
-                in_text_sentences.append(f"<div style='margin-bottom:8px; color:var(--text-muted);'><i class='fas fa-book'></i> <b>Bibliography Match:</b></div>{bib_entry_highlighted}")
-                
-                if marker:
-                    for sent in u_sentences:
-                        if marker.lower() in sent.lower():
-                            if search_title not in sent.lower():
-                                try:
-                                    sent_highlighted = re.sub(f"({re.escape(marker)})", r"<span class='highlight'>\1</span>", sent, flags=re.IGNORECASE)
-                                    in_text_sentences.append(f"<div style='margin-bottom:8px; color:var(--text-muted); margin-top:16px;'><i class='fas fa-quote-left'></i> <b>In-Text Citation:</b></div> {sent_highlighted}")
-                                except:
-                                    in_text_sentences.append(f"<div style='margin-bottom:8px; color:var(--text-muted); margin-top:16px;'><i class='fas fa-quote-left'></i> <b>In-Text Citation:</b></div> {sent}")
-
-                elements.append({ "group": "edges", "data": { "id": f"edge_{u['id']}_{v['id']}", "source": u["id"], "target": v["id"], "citation_number": marker if marker else "", "context": "|||".join(in_text_sentences) } })
+    for edge in cached_edges:
+        if edge["source"] in valid_node_ids and edge["target"] in valid_node_ids:
+            elements.append({
+                "group": "edges",
+                "data": {
+                    "id": html.escape(edge["id"]),
+                    "source": html.escape(edge["source"]),
+                    "target": html.escape(edge["target"]),
+                    "citation_number": edge.get("citation_number", ""),
+                    "context": edge.get("context", "")
+                }
+            })
 
     return jsonify(elements)
 
