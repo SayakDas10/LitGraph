@@ -3,8 +3,10 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>LitGraph</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <link rel="icon" href="data:,">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.31.0/cytoscape.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -12,14 +14,16 @@
 
 <body data-theme="default-dark">
 
-    <div id="syncOverlay">
+    <div id="syncOverlay" role="status" aria-live="polite" aria-busy="true">
         <i class="fas fa-circle-notch sync-spinner"></i>
         <h2 class="sync-title">Syncing Library...</h2>
-        <p class="sync-subtitle">LitGraph detected changes. Extracting fresh metadata.</p>
+        <p id="syncSubtitle" class="sync-subtitle">LitGraph detected changes. Extracting fresh metadata.</p>
+        <progress id="syncProgress" value="0" max="1"></progress>
+        <button id="cancelSyncBtn" class="compact-btn" type="button">Cancel synchronization</button>
     </div>
 
     <!-- Floating UI (Visible when Sidebar is hidden) -->
-    <button id="openSidebarBtn" onclick="toggleSidebar()" aria-label="Open Sidebar" title="Show Sidebar">
+    <button id="openSidebarBtn" aria-label="Open Sidebar" title="Show Sidebar">
         <i class="fas fa-bars"></i>
     </button>
 
@@ -28,17 +32,17 @@
             <input type="text" id="floatingSearchInput" placeholder="Find a paper in graph..." autocomplete="off">
             <div id="floatingSuggestionBox" class="suggestion-box"></div>
         </div>
-        <button onclick="searchNodeFloating()" title="Search">
+        <button id="floatingSearchBtn" title="Search">
             <i class="fas fa-search"></i>
         </button>
     </div>
 
     <!-- Single Local File Upload Modal -->
-    <div id="localFileModal" class="modal-overlay">
+    <div id="localFileModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="localModalTitle">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 style="margin:0; font-weight:700;">Add Single Paper</h3>
-                <button class="close-modal" onclick="closeLocalModal()"><i class="fas fa-times"></i></button>
+                <h3 id="localModalTitle" style="margin:0; font-weight:700;">Add Single Paper</h3>
+                <button id="closeLocalModalBtn" class="close-modal" aria-label="Close dialog"><i class="fas fa-times"></i></button>
             </div>
 
             <div class="form-group">
@@ -69,16 +73,16 @@
                 </div>
             </div>
 
-            <button id="submitLocalBtn" class="submit-btn" onclick="submitLocalPaper()">Add Paper</button>
+            <button id="submitLocalBtn" class="submit-btn">Add Paper</button>
         </div>
     </div>
 
     <!-- Bulk Library Import Modal -->
-    <div id="importLibraryModal" class="modal-overlay">
+    <div id="importLibraryModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 style="margin:0; font-weight:700;">Import Entire Library</h3>
-                <button class="close-modal" onclick="closeImportModal()"><i class="fas fa-times"></i></button>
+                <h3 id="importModalTitle" style="margin:0; font-weight:700;">Import Entire Library</h3>
+                <button id="closeImportModalBtn" class="close-modal" aria-label="Close dialog"><i class="fas fa-times"></i></button>
             </div>
 
             <div class="form-group">
@@ -107,13 +111,98 @@
                 </div>
             </div>
 
-            <button id="submitImportBtn" class="submit-btn" onclick="submitImportLibrary()">Import Library</button>
+            <button id="submitImportBtn" class="submit-btn">Import Library</button>
         </div>
     </div>
 
-    <div id="cy"></div>
+    <!-- Evidence Template Editor -->
+    <div id="templateEditorModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="templateEditorTitle">
+        <div class="modal-content template-editor-content">
+            <div class="modal-header">
+                <h3 id="templateEditorTitle">Custom Evidence Template</h3>
+                <button id="closeTemplateEditorBtn" class="close-modal" aria-label="Close dialog"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="form-group">
+                <label for="templateToEdit">Template</label>
+                <select id="templateToEdit" class="form-control"></select>
+            </div>
+            <div class="form-group">
+                <label for="templateName">Name</label>
+                <input id="templateName" class="form-control" maxlength="120" placeholder="e.g. Materials Characterization">
+            </div>
+            <div class="form-group">
+                <label for="templateDescription">Description</label>
+                <textarea id="templateDescription" class="form-control" rows="2" maxlength="1000"></textarea>
+            </div>
+            <div class="template-fields-header">
+                <span class="section-title">Fields</span>
+                <button id="addTemplateFieldBtn" class="compact-btn" type="button"><i class="fas fa-plus"></i> Add field</button>
+            </div>
+            <div id="templateFieldRows" class="template-field-rows"></div>
+            <div class="template-editor-actions">
+                <button id="deleteTemplateBtn" class="submit-btn danger-submit" type="button">Delete template</button>
+                <button id="saveTemplateBtn" class="submit-btn" type="button">Save template</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="cy" tabindex="0" role="application" aria-label="Interactive citation graph. Use left and right arrow keys to select papers and Enter to open details."></div>
+
+    <div id="graphToolbar" aria-label="Graph controls">
+        <button id="fitGraphBtn" class="toolbar-btn" title="Fit graph" aria-label="Fit graph"><i class="fas fa-compress-arrows-alt"></i></button>
+        <button id="zoomInBtn" class="toolbar-btn" title="Zoom in" aria-label="Zoom in"><i class="fas fa-plus"></i></button>
+        <button id="zoomOutBtn" class="toolbar-btn" title="Zoom out" aria-label="Zoom out"><i class="fas fa-minus"></i></button>
+        <select id="layoutSelect" class="toolbar-select" aria-label="Graph layout">
+            <option value="cose">Clusters</option>
+            <option value="breadthfirst">Citation flow</option>
+            <option value="grid">Grid</option>
+            <option value="circle">Circle</option>
+        </select>
+        <button id="runLayoutBtn" class="toolbar-btn" title="Run layout" aria-label="Run selected layout"><i class="fas fa-project-diagram"></i></button>
+        <select id="statusFilter" class="toolbar-select" aria-label="Filter by reading status">
+            <option value="all">All statuses</option>
+            <option value="none">Unread</option>
+            <option value="read">Read</option>
+            <option value="prioritize">Prioritized</option>
+        </select>
+        <select id="neighborhoodDepth" class="toolbar-select" aria-label="Neighborhood depth">
+            <option value="all">Full graph</option>
+            <option value="1">One hop</option>
+            <option value="2">Two hops</option>
+        </select>
+        <button id="toggleLabelsBtn" class="toolbar-btn active" title="Toggle labels" aria-label="Toggle labels"><i class="fas fa-font"></i></button>
+        <button id="toggleEdgesBtn" class="toolbar-btn active" title="Toggle edges" aria-label="Toggle edges"><i class="fas fa-share-alt"></i></button>
+        <button id="resetGraphViewBtn" class="toolbar-btn" title="Reset filters and hidden papers" aria-label="Reset graph view"><i class="fas fa-eye"></i></button>
+        <button id="graphFocusBtn" class="toolbar-btn" title="Graph focus mode" aria-label="Graph focus mode"><i class="fas fa-expand"></i></button>
+        <button id="exportGraphBtn" class="toolbar-btn" title="Export graph image" aria-label="Export graph image"><i class="fas fa-camera"></i></button>
+    </div>
+
+    <details id="graphLegend">
+        <summary>Legend</summary>
+        <div><span class="legend-node default-node"></span> Unread</div>
+        <div><span class="legend-node read-node"></span> Read</div>
+        <div><span class="legend-node priority-node"></span> Prioritized</div>
+        <div><i class="fas fa-sticky-note"></i> Notes</div>
+        <div><i class="fas fa-clipboard-check"></i> Evidence</div>
+    </details>
+
+    <div id="graphEmptyState" class="graph-empty-state" hidden>
+        <i class="fas fa-project-diagram"></i>
+        <h3>No papers in this view</h3>
+        <p>Change the filters, select another project, or import a PDF.</p>
+    </div>
+
+    <div id="graphContextMenu" class="graph-context-menu" hidden>
+        <button data-action="open">Open PDF</button>
+        <button data-action="neighbors">Show neighborhood</button>
+        <button data-action="pin">Pin position</button>
+        <button data-action="compare">Add to comparison</button>
+        <button data-action="prioritize">Toggle priority</button>
+        <button data-action="hide">Hide from view</button>
+    </div>
 
     <div id="sidebar">
+        <div id="sidebarResizeHandle" class="resize-handle resize-right" aria-hidden="true"></div>
         <div class="header-container">
             <h2>LitGraph</h2>
 
@@ -131,7 +220,7 @@
                     <option value="olivia">Olivia</option>
                 </select>
                 <!-- Hide Sidebar Button -->
-                <button class="close-btn" onclick="toggleSidebar()" aria-label="Hide Sidebar" title="Hide Sidebar"
+                <button id="hideSidebarBtn" class="close-btn" aria-label="Hide Sidebar" title="Hide Sidebar"
                     style="width: 34px; height: 34px; font-size: 0.9rem;">
                     <i class="fas fa-chevron-left"></i>
                 </button>
@@ -143,24 +232,34 @@
             <div id="folderTree"></div>
         </div>
 
+        <details class="project-template-panel">
+            <summary class="section-title">Project Evidence Templates</summary>
+            <div class="project-template-controls">
+                <select id="projectTemplateSelect" class="form-control" aria-label="Evidence template"></select>
+                <button id="addProjectTemplateBtn" class="compact-btn" title="Enable for current project"><i class="fas fa-plus"></i></button>
+            </div>
+            <div id="projectTemplateList" class="template-chip-list"></div>
+            <button id="manageTemplatesBtn" class="text-btn" type="button"><i class="fas fa-sliders-h"></i> Manage custom templates</button>
+        </details>
+
         <div class="controls">
             <div class="input-group">
                 <div class="autocomplete-container">
                     <input type="text" id="searchInput" placeholder="Find a paper in graph..." autocomplete="off">
                     <div id="suggestionBox" class="suggestion-box"></div>
                 </div>
-                <button onclick="searchNode()" title="Search"><i class="fas fa-search"></i></button>
+                <button id="searchBtn" title="Search"><i class="fas fa-search"></i></button>
             </div>
 
             <div style="display: flex; gap: 10px;">
                 <button class="action-btn"
                     style="flex: 1; padding: 14px; display: flex; flex-direction: row; justify-content: center; align-items: center; gap: 8px;"
-                    onclick="openLocalModal()">
+                    id="openLocalModalBtn">
                     <i class="fas fa-file-import"></i> Single
                 </button>
                 <button class="action-btn"
                     style="flex: 1; padding: 14px; display: flex; flex-direction: row; justify-content: center; align-items: center; gap: 8px;"
-                    onclick="openImportModal()">
+                    id="openImportModalBtn">
                     <i class="fas fa-folder-plus"></i> Import Library
                 </button>
             </div>
@@ -183,9 +282,10 @@
     </div>
 
     <div id="citation-panel">
+        <div id="citationResizeHandle" class="resize-handle resize-left" aria-hidden="true"></div>
         <div class="header-container" style="margin-bottom: 20px;">
             <h2 id="panelTitle" style="font-size: 1.25rem;">Details</h2>
-            <button class="close-btn" onclick="closeCitationPanel()" aria-label="Close Panel"><i
+            <button id="closeCitationPanelBtn" class="close-btn" aria-label="Close Panel"><i
                     class="fas fa-times"></i></button>
         </div>
 
@@ -213,6 +313,16 @@
                             class="fas fa-save"></i> Save Text Note</button>
                 </div>
 
+                <div id="evidenceSection">
+                    <div class="section-title">Evidence Templates</div>
+                    <p class="section-help">Structured paper characterization with source provenance.</p>
+                    <div class="evidence-template-controls">
+                        <select id="paperTemplateSelect" class="form-control" aria-label="Add evidence template"></select>
+                        <button id="addPaperTemplateBtn" class="compact-btn" type="button"><i class="fas fa-plus"></i> Add</button>
+                    </div>
+                    <div id="activeEvidenceTemplates" class="active-evidence-templates"></div>
+                </div>
+
                 <div>
                     <div class="section-title">Add Notes (Attachments)</div>
                     <div id="dropZone" class="drop-zone">
@@ -227,6 +337,17 @@
             </div>
         </div>
     </div>
+
+    <section id="comparisonDrawer" aria-labelledby="comparisonTitle">
+        <div class="comparison-header">
+            <h2 id="comparisonTitle">Paper Comparison</h2>
+            <div>
+                <button id="clearComparisonBtn" class="compact-btn" type="button">Clear</button>
+                <button id="closeComparisonBtn" class="close-btn" type="button" aria-label="Close comparison"><i class="fas fa-times"></i></button>
+            </div>
+        </div>
+        <div id="comparisonContent" class="comparison-content"></div>
+    </section>
 
     <!-- External Script Linked Here -->
     <script src="{{ url_for('static', filename='script.js') }}"></script>

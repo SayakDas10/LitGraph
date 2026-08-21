@@ -1,121 +1,190 @@
-# LitGraph 🕸️📚
+# LitGraph
 
-LitGraph is a privacy-first, local web application designed for researchers and academics. It automatically visualizes your collection of scientific PDFs as an interactive network graph, allowing you to seamlessly explore citation relationships and read the exact contextual sentences where one paper cites another.
+LitGraph is a local research-paper library that turns a collection of text-layer PDFs into an interactive citation graph. It is intended for researchers who want to browse relationships between papers, inspect the evidence behind inferred citations, organize reading, and keep notes beside the source material.
 
-Everything runs locally on your machine—no cloud subscriptions, no data harvesting, and no mandatory internet connection for core features.
+The Flask server binds to `127.0.0.1`, PDFs and notes remain on the local filesystem, and structured state is stored in a local SQLite database. Online metadata lookup is disabled by default.
 
-## ✨ Core Functionalities
+## Features
 
-* **Interactive Citation Network:** Visualizes papers as floating nodes. Edges represent citations, generated automatically by scanning the text of your PDFs.
-* **Contextual Citation Extraction:** Clicking an edge opens a sliding glass panel that displays the exact sentences where the source paper mentions the target paper.
-* **Smart Metadata Heuristics:** Automatically extracts titles from PDF metadata. If metadata is missing or corrupted (e.g., a file named verbatim `3476999.pdf`), the engine intelligently falls back to extracting the first substantial text block from the document's first page to generate the title.
+### Paper library
 
+- Import one PDF by absolute path, either by copying it or moving it into LitGraph.
+- Import a directory recursively while preserving its folder structure.
+- Reject invalid PDF signatures, unsafe destination paths, recursive imports, and duplicate filenames.
+- Browse the complete library or filter the graph by project folder.
+- Open a paper in a separate browser tab.
+- Rename an extracted title; manual titles persist across later PDF updates.
+- Mark papers as **Read** or **Prioritize**.
+- Delete a paper together with its text note and attachments.
 
-* **Integrated Paper Downloader:** Paste a direct PDF link, arXiv URL, or plain text citation. LitGraph connects to Semantic Scholar and arXiv APIs to find Open Access PDFs, download them directly to your local folder, and immediately update the graph.
-* **Modern Glassmorphic UI:** Features a sleek, distraction-free interface with a built-in search autocomplete system, interactive hover highlighting, and full Light/Dark mode support.
-* **Privacy-First & Local:** Your library never leaves your hard drive.
+### Citation graph
 
----
+- Extract text and local title candidates with PyMuPDF.
+- Detect a paper's References, Bibliography, or Works Cited section.
+- Match normalized title tokens so punctuation and common hyphenation differences do not prevent a match.
+- Resolve numbered and basic author-year markers.
+- Store the matched bibliography entry, in-text contexts, extraction method, and confidence score for every edge.
+- Show citation direction, evidence, method, and confidence when an edge is selected.
+- Search papers by title or path and highlight graph neighborhoods interactively.
+- Search full paper text, notes, citation evidence, and structured evidence through SQLite FTS5.
+- Explore the complete project or restrict the view to one-hop/two-hop neighborhoods and reading-status filters.
+- Switch between cluster, citation-flow, grid, and circle layouts.
+- Preserve node positions, pinned nodes, zoom, and graph context while project data changes.
+- Use semantic zoom: distant views reduce papers to compact marks, normal views show short titles, and close views show full titles.
+- Compare selected papers using their populated evidence fields.
+- Export a high-resolution PNG of the current graph.
 
-## 🚀 Setup & Installation
+Citation edges are inferred evidence, not ground truth. See [Citation-extraction limitations](#citation-extraction-limitations).
 
-This project relies on [uv](https://github.com/astral-sh/uv), an extremely fast Python package installer and resolver.
+### Notes and attachments
 
-### Prerequisites
+- Save a UTF-8 text note for each paper.
+- Attach `.ppt`, `.pptx`, `.docx`, `.txt`, `.pdf`, and `.md` files.
+- Validate attachment extensions, common container signatures, and a configurable upload-size limit.
+- Download saved attachments from the paper detail panel.
 
-* Python 3.8+ installed on your system.
-* `uv` installed (install via `curl -LsSf [https://astral.sh/uv/install.sh](https://astral.sh/uv/install.sh) | sh` on macOS/Linux or `powershell -c "irm [https://astral.sh/uv/install.ps1](https://astral.sh/uv/install.ps1) | iex"` on Windows).
+### Evidence Templates
 
-### Step-by-Step Guide
+- Characterize papers with structured, typed evidence without tying LitGraph to one discipline.
+- Start with the globally enabled **Generic Research** template covering questions, methods, datasets, metrics, findings, limitations, validity, future work, and artifacts.
+- Compose optional built-in templates for **Machine Learning**, **Hardware Accelerators**, and **Clinical Studies**.
+- Enable templates for an entire project folder or override them for an individual paper.
+- Create, edit, and delete custom templates through the UI.
+- Define text, numeric, Boolean, date, choice, citation, URL, range, and table fields with units and selectable options.
+- Store every value with its source excerpt, page, table/figure location, extraction method, confidence, and verification state.
+- Distinguish manual, imported, and automatically suggested evidence, as well as confirmed, suggested, and rejected values.
 
-1. **Clone the repository**
+Hardware-specific fields are never part of the universal paper model. They appear only when the optional Hardware Accelerators template is enabled. The same extension mechanism supports any academic discipline or interdisciplinary combination.
+
+### Local state and privacy
+
+- SQLite transactions replace the previous shared JSON cache and prevent lost read-modify-write updates.
+- Unchanged PDFs reuse cached extracted text; only new or modified PDFs are parsed again.
+- Citation edges are updated incrementally: a paper change recomputes only relationships where that paper is a source or target.
+- Library synchronization runs in a cancellable background job with per-paper progress and error reporting.
+- Legacy `.litgraph.json` paper metadata is migrated automatically on the first database initialization. Existing titles are conservatively retained as manual overrides.
+- All mutation endpoints require a session-bound request token.
+- Paper paths, folder names, titles, and attachment names are transported as raw JSON and rendered with safe DOM operations.
+- Debug mode is disabled, security headers are enabled, and the server listens only on localhost.
+
+## Requirements
+
+- Python 3.11 or newer
+- [`uv`](https://docs.astral.sh/uv/)
+- A modern browser
+- Internet access for the current Cytoscape, Font Awesome, and Google Fonts web assets
+
+PDF ingestion and citation extraction work without an external API. The current browser UI still loads the three assets above from pinned CDN URLs, so completely disconnected use requires vendoring those assets locally.
+
+## Installation
+
 ```bash
-git clone https://github.com/yourusername/LitGraph.git
+git clone https://github.com/SayakDas10/LitGraph.git
 cd LitGraph
-
+uv sync
 ```
 
+Run LitGraph with:
 
-2. **Create a virtual environment using `uv**`
 ```bash
-uv venv
-
+uv run python app.py
 ```
 
+The application opens `http://127.0.0.1:5001` in the default browser. If a browser does not open automatically, visit that address manually.
 
-3. **Activate the virtual environment**
-* On macOS and Linux:
+## First use
+
+1. Select **Single** to copy or move one PDF into the library, or select **Import Library** to ingest a directory tree.
+2. Wait for synchronization. New or changed PDFs are parsed and the citation graph is rebuilt.
+3. Select a project folder to filter the visible graph.
+4. Click a node to open the PDF, correct its title, set reading status, write notes, attach files, or delete it.
+5. Add or remove Evidence Templates for the paper, then record structured values and their provenance.
+6. Use **Project Evidence Templates** to apply a template to every paper under the selected folder.
+7. Click an edge to inspect its bibliography match, in-text evidence, method, and confidence.
+8. Use either search bar to center the first matching paper.
+
+The graph toolbar provides fit/zoom controls, four layouts, reading-status and neighborhood filters, label/edge visibility, focus mode, view reset, and image export. Right-click or long-press a paper for neighborhood, pin, comparison, priority, and hide actions. Focus the graph and use Left/Right followed by Enter for keyboard paper navigation.
+
+Files can also be placed directly under `papers/`. Preserve any desired project structure with subdirectories. LitGraph detects additions, modifications, and removals when the page loads or the library is refreshed through the UI.
+
+## Optional DOI metadata lookup
+
+Online lookup is disabled by default. Enable it for a run with:
+
 ```bash
-source .venv/bin/activate
-
+LITGRAPH_ONLINE_METADATA=1 uv run python app.py
 ```
 
+When enabled, LitGraph extracts a DOI locally and sends only that DOI to the Semantic Scholar Graph API to request a title. It does **not** send first-page text or complete PDF content. If no DOI is found, the request fails, or the returned title is implausible, LitGraph keeps the locally extracted title.
 
-* On Windows:
+Semantic Scholar availability and rate limits are outside LitGraph's control. Corrected titles can always be entered manually.
+
+## Configuration
+
+| Environment variable | Default | Purpose |
+|---|---:|---|
+| `LITGRAPH_ONLINE_METADATA` | `0` | Enable DOI-only Semantic Scholar title lookup |
+| `LITGRAPH_MAX_ATTACHMENT_MB` | `50` | Maximum size of one uploaded attachment |
+| `LITGRAPH_SECRET_KEY` | Random per launch | Stable Flask session secret, useful if persistent browser sessions are required |
+
+Do not bind the application to `0.0.0.0` without adding authentication, TLS, and a deliberate network-access policy. The import API can read from local paths available to the LitGraph process, so this application must be treated as a local desktop service.
+
+## Local data layout
+
+```text
+LitGraph/
+├── papers/              # PDFs and project folders
+├── notes/               # Per-paper text notes and attachments
+├── .litgraph.db         # SQLite paper, text-cache, and edge state
+├── app.py               # Flask routes and application entry point
+├── litgraph/
+│   ├── config.py        # Paths, limits, and safe path resolution
+│   ├── evidence.py      # Built-in templates and evidence validation
+│   ├── services.py      # PDF, metadata, and citation processing
+│   └── storage.py       # SQLite repository
+├── static/              # Browser logic and styles
+├── templates/           # HTML application shell
+└── tests/               # Security, extraction, and persistence tests
+```
+
+`papers/`, `notes/`, the SQLite database, and the legacy JSON cache are ignored by Git. Back up the first three if the library is important. SQLite may temporarily create `-wal` and `-shm` companion files while LitGraph is running; stop the application before copying the database for a simple consistent backup.
+
+## Citation-extraction limitations
+
+The current extractor is intentionally conservative:
+
+- The PDF must contain a readable text layer; scanned PDFs require OCR before import.
+- A recognizable References, Bibliography, or Works Cited heading is required.
+- Matching uses normalized title tokens, so titles with severe OCR errors or substantially different published/preprint names can be missed.
+- Numbered references and simple author-year references are supported. Superscript markers and unusual publisher-specific formats may not be resolved.
+- Confidence indicates the available extraction evidence; it is not a calibrated probability that the citation is correct.
+- Extraction currently rebuilds the edge set from cached texts after a library or title change. This avoids reparsing unchanged PDFs, but pairwise title matching still scales approximately quadratically with library size.
+
+For bibliometric or publication-quality analysis, validate inferred edges manually. A future production-grade pipeline could integrate GROBID and DOI/arXiv resolution, but those external services and models are not bundled with this local release.
+
+## Development and tests
+
+Install the development dependency group and run the test suite:
+
 ```bash
-.venv\Scripts\activate
-
+uv sync --extra dev
+uv run pytest
 ```
 
+The tests cover canonical path containment, symlink escape prevention, recursive import detection, file signatures, numeric and incremental citation evidence, manual-title persistence, status persistence, full-text indexing, incremental edge replacement, template composition, typed evidence, provenance persistence, and cascading deletion.
 
+Useful next development targets are calibrated edge evaluation on a labeled PDF corpus, local vendoring of browser assets, attachment deletion, automatic evidence suggestions, and server-side community aggregation for extremely large libraries.
 
+## Security notes
 
-4. **Install dependencies**
-```bash
-uv pip install Flask PyMuPDF requests
+- PDF and Office files are untrusted inputs. Signature checks reject obvious extension spoofing but are not malware scanning or sandboxing.
+- Attachments are served as downloads with MIME sniffing disabled.
+- The app uses a strict descendant-path policy for managed destinations and verifies UUID ownership before accessing notes.
+- Copy is safer than move because moving removes the original after a successful filesystem operation.
+- Deleting a paper is intentionally destructive and cannot be undone from LitGraph.
 
-```
+Please report security issues privately before publishing exploit details.
 
+## License
 
-5. **Run the application**
-```bash
-python app.py
-
-```
-
-
-*LitGraph will automatically create a `papers/` folder in your directory and pop open your default web browser.*
-
----
-
-## 📖 How to Use
-
-1. **Populating your Library:** Drag and drop any scientific PDF into the newly created `papers/` folder. Refresh the browser page to see the updated graph.
-2. **Reading Papers:** Click on any node (pill) in the graph to instantly open that PDF in a new browser tab.
-3. **Exploring Citations:** Hover over a node to highlight its immediate neighborhood. Click on a connecting edge to open the right-side panel, which will reveal the exact in-text citation context.
-4. **Finding New Papers:** Paste a citation or title into the left sidebar's "Download & Add" input. LitGraph will query academic databases and present a download menu.
-
----
-
-## ⚠️ Limitations & Known Behaviors
-
-* **Heuristic Extraction Limits:** The citation extraction relies on RegEx heuristics to match reference lists and in-text markers (e.g., `[10]`, `(Smith, 2024)`). While highly effective for standard academic formats (IEEE, ACM, APA), highly unconventional formatting or heavily customized LaTeX styles might occasionally be missed.
-* **Publisher Firewalls (403 Errors):** LitGraph cannot bypass strict publisher firewalls (e.g., specific ACM or IEEE locked portals). If you attempt to download a paywalled URL via the app, you will receive a `403 Forbidden` error. You must download these manually via your browser (using institutional access) and drop them into the `papers/` folder.
-* **Requires Text-Layer PDFs:** The application cannot read scanned images of papers. The PDFs must contain a readable text layer (OCR).
-* **Performance on Massive Libraries:** LitGraph reads and builds the graph dynamically on load. While highly optimized, dropping hundreds of massive PDFs into the folder at once may cause slightly longer initial load times.
-
----
-
-## 🛡️ Security Notice
-
-**LitGraph is designed strictly as a local desktop tool.**
-
-By default, the Flask server binds to `127.0.0.1` (localhost), meaning it is only accessible from your own machine. **Do not modify the host configuration to `0.0.0.0**` unless you are on a highly secure, private home network. Doing so on a public Wi-Fi network (like a university or coffee shop) will expose your personal computer's `papers/` folder and LitGraph's download endpoints to anyone on that same network.
-
-The backend includes active mitigations against Cross-Site Scripting (XSS) and Magic Byte validation to ensure downloaded files are genuine PDFs, but maintaining local network hygiene is your responsibility.
-
----
-
-## Change Log
-- Aug 10, 26: User can now import downloaded pdfs or import their whole library directly from the app. 
-- Aug 10, 26: Added note taking. User can take basic text notes or upload ppt, pdf, docx, md, txt note files. Each paper has unique id that the note maps to. All saved locally.
-- Aug 10, 26: Fixed paper naming issue. Verify name with semantic scholar. Give user the option to change paper name. 
-- Aug 8, 26: Added folder support. Read, prioritize options to paper. Implemented local cache for faster initial load.
-
-## 🤝 Contributing
-
-Contributions, issues, and feature requests are highly welcome! Feel free to check the [issues page](https://www.google.com/search?q=https://github.com/yourusername/LitGraph/issues) if you want to contribute to the heuristic extraction engine or UI enhancements.
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+LitGraph is released under the [MIT License](LICENSE).

@@ -2,6 +2,9 @@
 venv/
 env/
 .litgraph.json
+.litgraph.db
+.litgraph.db-shm
+.litgraph.db-wal
 __pycache__/
 *.pyc
 papers/*

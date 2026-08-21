@@ -1,7 +1,7 @@
 [project]
 name = "litgraph"
 version = "0.1.0"
-description = "Add your description here"
+description = "Privacy-oriented local citation graph and research-paper library"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -9,3 +9,12 @@ dependencies = [
     "pymupdf>=1.28.2",
     "requests>=2.34.2",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
