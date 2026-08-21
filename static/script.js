@@ -19,11 +19,9 @@ function showError(error, fallback = 'The operation could not be completed.') {
 window.toggleSidebar = function () {
     const sidebar = document.getElementById('sidebar');
     const openBtn = document.getElementById('openSidebarBtn');
-    const floatingSearch = document.getElementById('floatingSearchContainer');
 
     sidebar.classList.toggle('hidden');
     openBtn.classList.toggle('visible');
-    floatingSearch.classList.toggle('visible');
     document.body.classList.toggle('sidebar-hidden', sidebar.classList.contains('hidden'));
     localStorage.setItem('litgraph-sidebar-hidden', sidebar.classList.contains('hidden') ? '1' : '0');
     setTimeout(updateGraphViewport, 320);
@@ -36,7 +34,9 @@ function updateGraphViewport() {
     const graph = document.getElementById('cy');
     graph.style.left = `${offset}px`;
     graph.style.width = `calc(100% - ${offset}px)`;
-    document.getElementById('graphToolbar').style.left = `calc(50% + ${offset / 2}px)`;
+    const toolbar = document.getElementById('graphToolbar');
+    toolbar.style.left = `calc(50% + ${offset / 2}px)`;
+    toolbar.style.maxWidth = `${Math.max(window.innerWidth - offset - 72, 280)}px`;
     window.cy?.resize();
 }
 
@@ -1006,13 +1006,13 @@ function executeSearch(query) {
         setTimeout(() => window.cy.elements().removeClass('faded').removeClass('highlighted-node'), 3000);
 
         document.getElementById('searchInput').value = '';
-        document.getElementById('floatingSearchInput').value = '';
+        document.getElementById('toolbarSearchInput').value = '';
     } else {
         alert("No paper found matching that search in the graph.");
     }
 }
 
-function bindSearchLogic(inputId, suggestionBoxId, triggerFunc) {
+function bindSearchLogic(inputId, suggestionBoxId, triggerFunc, afterSelection = () => {}) {
     const input = document.getElementById(inputId);
     const suggestionBox = document.getElementById(suggestionBoxId);
 
@@ -1048,6 +1048,7 @@ function bindSearchLogic(inputId, suggestionBoxId, triggerFunc) {
                     input.value = result.title;
                     suggestionBox.style.display = 'none';
                     focusSearchResult(result);
+                    afterSelection();
                 });
                 suggestionBox.appendChild(div);
             });
@@ -1084,16 +1085,43 @@ async function focusSearchResult(result) {
 }
 
 bindSearchLogic('searchInput', 'suggestionBox', executeSearch);
-bindSearchLogic('floatingSearchInput', 'floatingSuggestionBox', executeSearch);
+
+function setToolbarSearch(open) {
+    const container = document.getElementById('toolbarSearchContainer');
+    const toolbar = document.getElementById('graphToolbar');
+    const toggle = document.getElementById('toggleToolbarSearchBtn');
+    container.classList.toggle('visible', open);
+    toolbar.classList.toggle('search-open', open);
+    container.setAttribute('aria-hidden', String(!open));
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.classList.toggle('active', open);
+    if (open) {
+        requestAnimationFrame(() => document.getElementById('toolbarSearchInput').focus());
+    } else {
+        document.getElementById('toolbarSuggestionBox').style.display = 'none';
+    }
+}
+
+function closeToolbarSearch() {
+    setToolbarSearch(false);
+}
+
+bindSearchLogic(
+    'toolbarSearchInput',
+    'toolbarSuggestionBox',
+    query => { executeSearch(query); closeToolbarSearch(); },
+    closeToolbarSearch,
+);
 
 window.searchNode = function () {
     document.getElementById('suggestionBox').style.display = 'none';
     executeSearch(document.getElementById('searchInput').value);
 };
 
-window.searchNodeFloating = function () {
-    document.getElementById('floatingSuggestionBox').style.display = 'none';
-    executeSearch(document.getElementById('floatingSearchInput').value);
+window.searchNodeToolbar = function () {
+    document.getElementById('toolbarSuggestionBox').style.display = 'none';
+    executeSearch(document.getElementById('toolbarSearchInput').value);
+    closeToolbarSearch();
 };
 
 async function openTemplateEditor() {
@@ -1170,7 +1198,13 @@ async function deleteTemplate() {
 
 document.getElementById('openSidebarBtn').addEventListener('click', toggleSidebar);
 document.getElementById('hideSidebarBtn').addEventListener('click', toggleSidebar);
-document.getElementById('floatingSearchBtn').addEventListener('click', searchNodeFloating);
+document.getElementById('toggleToolbarSearchBtn').addEventListener('click', () => {
+    setToolbarSearch(!document.getElementById('toolbarSearchContainer').classList.contains('visible'));
+});
+document.getElementById('toolbarSearchInput').addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeToolbarSearch();
+});
+document.getElementById('toolbarSearchBtn').addEventListener('click', searchNodeToolbar);
 document.getElementById('searchBtn').addEventListener('click', searchNode);
 document.getElementById('openLocalModalBtn').addEventListener('click', openLocalModal);
 document.getElementById('closeLocalModalBtn').addEventListener('click', closeLocalModal);

@@ -282,6 +282,14 @@ a:focus-visible {
     transition: opacity 0.25s, transform 0.25s;
 }
 
+#graphToolbar.search-open {
+    overflow: visible;
+}
+
+#graphToolbar.search-open > :not(#toggleToolbarSearchBtn):not(#toolbarSearchContainer) {
+    display: none;
+}
+
 .toolbar-btn,
 .toolbar-select {
     min-width: 38px;
@@ -683,8 +691,7 @@ h2 {
     font-weight: 500;
 }
 
-.input-group button,
-#floatingSearchContainer button {
+.input-group button {
     background: var(--highlight);
     color: var(--bg-main);
     border: none;
@@ -701,15 +708,13 @@ h2 {
     flex-shrink: 0;
 }
 
-.input-group button:hover,
-#floatingSearchContainer button:hover {
+.input-group button:hover {
     background: var(--highlight-hover);
     transform: translateY(-3px) scale(1.05);
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
 }
 
-.input-group button:active,
-#floatingSearchContainer button:active {
+.input-group button:active {
     transform: translateY(0) scale(0.95);
 }
 
@@ -1345,41 +1350,61 @@ h2 {
     transform: scale(1.1);
 }
 
-/* Floating Search Container */
-#floatingSearchContainer {
-    position: absolute;
-    top: 24px;
-    left: 50%;
-    transform: translate(-50%, -20px);
-    width: 450px;
-    max-width: 90vw;
-    z-index: 5;
-    opacity: 0;
-    pointer-events: none;
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+/* Compact search that expands inside the graph toolbar. */
+#toolbarSearchContainer {
     display: flex;
-    gap: 10px;
-    background: var(--bg-sidebar);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--border-color);
-    padding: 10px;
-    border-radius: 999px;
-    box-shadow: 0 10px 25px -5px var(--shadow-color);
+    align-items: center;
+    gap: 5px;
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transition: width 0.25s ease, opacity 0.2s ease;
 }
 
-#floatingSearchContainer.visible {
+#toolbarSearchContainer.visible {
+    width: 280px;
     opacity: 1;
+    overflow: visible;
     pointer-events: auto;
-    transform: translate(-50%, 0);
 }
 
-#floatingSearchContainer .autocomplete-container input {
-    border: none;
-    box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+#toolbarSearchContainer .autocomplete-container {
+    position: relative;
+    min-width: 0;
+}
+
+#toolbarSearchContainer .autocomplete-container input {
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 0.84rem;
+}
+
+#toolbarSearchContainer .suggestion-box {
+    top: calc(100% + 15px);
+    right: -43px;
+    min-width: 320px;
+}
+
+.toolbar-search-submit {
+    flex: 0 0 38px;
+    color: var(--highlight);
 }
 
 @media (max-width: 850px) {
+    #toolbarSearchContainer.visible {
+        width: 210px;
+    }
+
+    #toolbarSearchContainer .suggestion-box {
+        min-width: min(320px, calc(100vw - 48px));
+    }
+
     #sidebar {
         width: calc(100vw - 48px);
         z-index: 20;

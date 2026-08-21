@@ -27,16 +27,6 @@
         <i class="fas fa-bars"></i>
     </button>
 
-    <div id="floatingSearchContainer">
-        <div class="autocomplete-container" style="flex: 1; position: relative;">
-            <input type="text" id="floatingSearchInput" placeholder="Find a paper in graph..." autocomplete="off">
-            <div id="floatingSuggestionBox" class="suggestion-box"></div>
-        </div>
-        <button id="floatingSearchBtn" title="Search">
-            <i class="fas fa-search"></i>
-        </button>
-    </div>
-
     <!-- Single Local File Upload Modal -->
     <div id="localFileModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="localModalTitle">
         <div class="modal-content">
@@ -173,6 +163,14 @@
         <button id="toggleLabelsBtn" class="toolbar-btn active" title="Toggle labels" aria-label="Toggle labels"><i class="fas fa-font"></i></button>
         <button id="toggleEdgesBtn" class="toolbar-btn active" title="Toggle edges" aria-label="Toggle edges"><i class="fas fa-share-alt"></i></button>
         <button id="resetGraphViewBtn" class="toolbar-btn" title="Reset filters and hidden papers" aria-label="Reset graph view"><i class="fas fa-eye"></i></button>
+        <button id="toggleToolbarSearchBtn" class="toolbar-btn" title="Search papers" aria-label="Search papers" aria-expanded="false" aria-controls="toolbarSearchContainer"><i class="fas fa-search"></i></button>
+        <div id="toolbarSearchContainer" aria-hidden="true">
+            <div class="autocomplete-container">
+                <input type="text" id="toolbarSearchInput" placeholder="Find a paper..." autocomplete="off" aria-label="Search papers">
+                <div id="toolbarSuggestionBox" class="suggestion-box"></div>
+            </div>
+            <button id="toolbarSearchBtn" class="toolbar-btn toolbar-search-submit" title="Run search" aria-label="Run paper search"><i class="fas fa-arrow-right"></i></button>
+        </div>
         <button id="graphFocusBtn" class="toolbar-btn" title="Graph focus mode" aria-label="Graph focus mode"><i class="fas fa-expand"></i></button>
         <button id="exportGraphBtn" class="toolbar-btn" title="Export graph image" aria-label="Export graph image"><i class="fas fa-camera"></i></button>
     </div>
